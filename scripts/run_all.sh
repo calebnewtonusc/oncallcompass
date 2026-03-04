@@ -71,7 +71,7 @@ echo "  RL checkpoint: ${CHECKPOINT_DIR}/rl"
 
 # ── Step 6: CompassBench evaluation ──────────────────────────
 echo "[6/6] Running CompassBench evaluation..."
-CUDA_VISIBLE_DEVICES=16,17 python evaluation/compassbench.py \
+${EVAL_GPUS:+CUDA_VISIBLE_DEVICES=$EVAL_GPUS} python evaluation/compassbench.py \
     --model_path "${CHECKPOINT_DIR}/rl" \
     --drill_set "${DATA_DIR}/drills/compassbench_v1.jsonl" \
     --output_path "results/${RUN_NAME}_compassbench.json"

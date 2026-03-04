@@ -22,7 +22,7 @@ Usage:
 import asyncio
 import json
 import re
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, asdict
 from pathlib import Path
 
 import aiohttp
@@ -32,11 +32,12 @@ from loguru import logger
 @dataclass
 class CloudIncident:
     """A cloud provider status page incident."""
-    provider: str        # "aws" | "gcp" | "azure" | "cloudflare"
+
+    provider: str  # "aws" | "gcp" | "azure" | "cloudflare"
     incident_id: str
     title: str
     affected_services: list[str]
-    severity: str        # "minor" | "major" | "critical"
+    severity: str  # "minor" | "major" | "critical"
     start_time: str
     end_time: str
     duration_minutes: int
@@ -83,7 +84,9 @@ class CloudStatusCrawler:
 
         # Filter for incidents with root cause information
         quality = [i for i in all_incidents if self._has_root_cause(i)]
-        logger.info(f"Total: {len(all_incidents)} incidents, {len(quality)} with root cause")
+        logger.info(
+            f"Total: {len(all_incidents)} incidents, {len(quality)} with root cause"
+        )
 
         self._save(quality)
         return quality
@@ -115,21 +118,27 @@ class CloudStatusCrawler:
 
         return incidents
 
-    def _parse_statuspage_incident(self, raw: dict, provider: str) -> CloudIncident | None:
+    def _parse_statuspage_incident(
+        self, raw: dict, provider: str
+    ) -> CloudIncident | None:
         """Parse a Statuspage.io incident JSON into CloudIncident."""
         try:
             updates = raw.get("incident_updates", [])
             # Sort by created_at descending (newest first)
-            updates = sorted(updates, key=lambda u: u.get("created_at", ""), reverse=True)
+            updates = sorted(
+                updates, key=lambda u: u.get("created_at", ""), reverse=True
+            )
 
             # Build timeline from updates
             timeline = []
             for update in reversed(updates):
-                timeline.append({
-                    "time": update.get("created_at", ""),
-                    "status": update.get("status", ""),
-                    "description": update.get("body", "")[:500],
-                })
+                timeline.append(
+                    {
+                        "time": update.get("created_at", ""),
+                        "status": update.get("status", ""),
+                        "description": update.get("body", "")[:500],
+                    }
+                )
 
             # Extract root cause from resolution update
             resolution_update = next(
@@ -144,7 +153,8 @@ class CloudStatusCrawler:
 
             # Get affected components
             affected = [
-                c.get("name", "") for c in raw.get("components", [])
+                c.get("name", "")
+                for c in raw.get("components", [])
                 if c.get("status") not in ("operational", "")
             ]
 
@@ -155,6 +165,7 @@ class CloudStatusCrawler:
             if start and end:
                 try:
                     from datetime import datetime
+
                     # Try multiple ISO 8601 variants; some providers omit microseconds.
                     _formats = [
                         "%Y-%m-%dT%H:%M:%S.%fZ",
@@ -162,10 +173,15 @@ class CloudStatusCrawler:
                         "%Y-%m-%dT%H:%M:%S.%f+00:00",
                         "%Y-%m-%dT%H:%M:%S+00:00",
                     ]
+
                     def _parse(dt_str: str):
                         for _fmt in _formats:
                             try:
-                                return datetime.strptime(dt_str[:26], _fmt.rstrip("Z") + ("Z" if _fmt.endswith("Z") else ""))
+                                return datetime.strptime(
+                                    dt_str[:26],
+                                    _fmt.rstrip("Z")
+                                    + ("Z" if _fmt.endswith("Z") else ""),
+                                )
                             except ValueError:
                                 pass
                         for _fmt in _formats:
@@ -174,6 +190,7 @@ class CloudStatusCrawler:
                             except ValueError:
                                 pass
                         return None
+
                     s = _parse(start)
                     e = _parse(end)
                     if s and e:

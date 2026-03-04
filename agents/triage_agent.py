@@ -37,7 +37,6 @@ import os
 import re
 import time
 from dataclasses import asdict, dataclass, field
-from pathlib import Path
 from typing import Any
 
 import torch
@@ -51,6 +50,7 @@ try:
     from fastapi import FastAPI, HTTPException
     from fastapi.middleware.cors import CORSMiddleware
     from pydantic import BaseModel
+
     FASTAPI_AVAILABLE = True
 except ImportError:
     FASTAPI_AVAILABLE = False
@@ -71,7 +71,7 @@ OUTPUT_SCHEMA = {
             "hypothesis": "string",
             "confidence": "float 0-1",
             "evidence": ["string"],
-            "ruling_out": "string — single step to confirm or rule out"
+            "ruling_out": "string — single step to confirm or rule out",
         }
     ],
     "investigation_steps": ["ordered list of investigation steps"],
@@ -80,10 +80,8 @@ OUTPUT_SCHEMA = {
         "timeline": ["string"],
         "root_cause": "string",
         "contributing_factors": ["string"],
-        "action_items": [
-            {"item": "string", "owner": "string", "prevents": "string"}
-        ]
-    }
+        "action_items": [{"item": "string", "owner": "string", "prevents": "string"}],
+    },
 }
 
 
@@ -119,13 +117,15 @@ class TriageResult:
         return {
             "ranked_hypotheses": [asdict(h) for h in self.ranked_hypotheses],
             "investigation_steps": self.investigation_steps,
-            "postmortem_draft": asdict(self.postmortem_draft) if self.postmortem_draft else None,
+            "postmortem_draft": asdict(self.postmortem_draft)
+            if self.postmortem_draft
+            else None,
             "meta": {
                 "latency_ms": self.latency_ms,
                 "model_path": self.model_path,
                 "hypothesis_count": len(self.ranked_hypotheses),
                 "step_count": len(self.investigation_steps),
-            }
+            },
         }
 
 
@@ -159,13 +159,13 @@ class TriageAgent:
         self.model = AutoModelForCausalLM.from_pretrained(
             model_path,
             torch_dtype=torch.bfloat16 if self.device != "cpu" else torch.float32,
-            device_map="auto" if self.device == "cuda" else None,
+            device_map="auto" if self.device.startswith("cuda") else None,
             trust_remote_code=True,
         )
         if len(self.tokenizer) > self.model.config.vocab_size:
             self.model.resize_token_embeddings(len(self.tokenizer))
         self.model.eval()
-        print(f"OncallCompass loaded.")
+        print("OncallCompass loaded.")
 
     def triage(
         self,
@@ -204,12 +204,15 @@ class TriageAgent:
         metrics: dict[str, Any],
         context: dict[str, Any],
     ) -> str:
-        user_content = json.dumps({
-            "alerts": alerts,
-            "logs": logs,
-            "metrics": metrics,
-            "context": context,
-        }, indent=2)
+        user_content = json.dumps(
+            {
+                "alerts": alerts,
+                "logs": logs,
+                "metrics": metrics,
+                "context": context,
+            },
+            indent=2,
+        )
 
         return (
             f"<|im_start|>system\n{SYSTEM_PROMPT}\n<|im_end|>\n"
@@ -229,15 +232,14 @@ class TriageAgent:
                 pad_token_id=self.tokenizer.pad_token_id,
             )
         return self.tokenizer.decode(
-            output[0][inputs["input_ids"].shape[1]:],
-            skip_special_tokens=True
+            output[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True
         )
 
     def _parse_response(self, response_text: str) -> dict[str, Any]:
         try:
             return json.loads(response_text.strip())
         except json.JSONDecodeError:
-            match = re.search(r'\{.*\}', response_text, re.DOTALL)
+            match = re.search(r"\{.*\}", response_text, re.DOTALL)
             if match:
                 try:
                     return json.loads(match.group())
@@ -325,7 +327,9 @@ if FASTAPI_AVAILABLE:
     async def triage_endpoint(request: TriageRequest) -> dict[str, Any]:
         """Triage an active incident."""
         if not request.alerts:
-            raise HTTPException(status_code=400, detail="At least one alert is required")
+            raise HTTPException(
+                status_code=400, detail="At least one alert is required"
+            )
 
         agent = get_agent()
         result = agent.triage(
@@ -339,7 +343,10 @@ if FASTAPI_AVAILABLE:
 
     @app.get("/health")
     async def health() -> dict[str, str]:
-        return {"status": "ok", "model": os.environ.get("FINAL_CHECKPOINT", "checkpoints/rl")}
+        return {
+            "status": "ok",
+            "model": os.environ.get("FINAL_CHECKPOINT", "checkpoints/rl"),
+        }
 
 
 # ─── CLI entry point ─────────────────────────────────────────────────────────

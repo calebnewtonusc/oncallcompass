@@ -33,9 +33,10 @@ from loguru import logger
 @dataclass
 class RunbookEntry:
     """A single runbook entry with alert context and resolution steps."""
+
     source: str
-    alert_type: str          # e.g., "HighErrorRate", "OOMKilled", "DiskFull"
-    service_type: str        # e.g., "web", "database", "cache", "queue"
+    alert_type: str  # e.g., "HighErrorRate", "OOMKilled", "DiskFull"
+    service_type: str  # e.g., "web", "database", "cache", "queue"
     symptoms: list[str]
     investigation_steps: list[str]
     common_causes: list[str]
@@ -180,7 +181,9 @@ class PagerDutyCorpus:
         self._save(entries)
         return entries
 
-    async def _crawl_web_sources(self, session: aiohttp.ClientSession) -> list[RunbookEntry]:
+    async def _crawl_web_sources(
+        self, session: aiohttp.ClientSession
+    ) -> list[RunbookEntry]:
         """Crawl PagerDuty and Atlassian incident response guides."""
         entries = []
         for source in PAGERDUTY_RUNBOOK_SOURCES:
@@ -190,14 +193,18 @@ class PagerDutyCorpus:
                     async with session.get(url) as resp:
                         if resp.status == 200:
                             html = await resp.text()
-                            section_entries = self._parse_runbook_page(html, source["name"], section)
+                            section_entries = self._parse_runbook_page(
+                                html, source["name"], section
+                            )
                             entries.extend(section_entries)
                 except Exception as e:
                     logger.debug(f"Failed to fetch {url}: {e}")
 
         return entries
 
-    def _parse_runbook_page(self, html: str, source: str, section: str) -> list[RunbookEntry]:
+    def _parse_runbook_page(
+        self, html: str, source: str, section: str
+    ) -> list[RunbookEntry]:
         """Extract structured runbook content from HTML."""
         soup = BeautifulSoup(html, "html.parser")
         entries = []
@@ -264,7 +271,11 @@ class PagerDutyCorpus:
         """Extract cause statements from text."""
         causes = []
         # Look for "because", "due to", "caused by" patterns
-        for m in re.finditer(r"(?:because|due to|caused by|result of)\s+(.+?)(?:[.,;]|$)", text, re.IGNORECASE):
+        for m in re.finditer(
+            r"(?:because|due to|caused by|result of)\s+(.+?)(?:[.,;]|$)",
+            text,
+            re.IGNORECASE,
+        ):
             cause = m.group(1).strip()[:150]
             if cause:
                 causes.append(cause)

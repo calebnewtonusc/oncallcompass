@@ -16,35 +16,35 @@ Usage:
 """
 
 import re
-from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Any
+from dataclasses import dataclass
 
 
 @dataclass
 class AlertCluster:
     """A cluster of related alerts that likely share a root cause."""
+
     cluster_id: str
-    primary_alert: str              # Most diagnostic alert in cluster
-    supporting_alerts: list[str]    # Corroborating alerts
+    primary_alert: str  # Most diagnostic alert in cluster
+    supporting_alerts: list[str]  # Corroborating alerts
     affected_services: list[str]
     first_alert_time: str | None
     alert_count: int
-    category_hint: str              # Likely incident category
-    severity: str                   # "critical" | "high" | "medium" | "low"
+    category_hint: str  # Likely incident category
+    severity: str  # "critical" | "high" | "medium" | "low"
 
 
 @dataclass
 class CorrelatedIncident:
     """Fully correlated incident context ready for hypothesis ranking."""
+
     alert_clusters: list[AlertCluster]
     primary_cluster: AlertCluster
     total_alert_count: int
     affected_services: list[str]
     first_signal_time: str | None
     estimated_start: str | None
-    noise_alerts: list[str]         # Alerts likely unrelated to root cause
-    signal_strength: float          # 0-1, how clean the signal is (1 = obvious)
+    noise_alerts: list[str]  # Alerts likely unrelated to root cause
+    signal_strength: float  # 0-1, how clean the signal is (1 = obvious)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -55,7 +55,7 @@ class CorrelatedIncident:
 DOWNSTREAM_NOISE_PATTERNS = [
     r"health.*check.*failed",
     r"pod.*not.*ready",
-    r"container.*restart",   # Usually symptom, not cause
+    r"container.*restart",  # Usually symptom, not cause
     r"deployment.*timeout",  # Often consequence of underlying issue
 ]
 
@@ -73,10 +73,11 @@ HIGH_SIGNAL_PATTERNS = {
 
 class SignalCorrelator:
     def __init__(self):
-        self._noise_patterns = [re.compile(p, re.IGNORECASE) for p in DOWNSTREAM_NOISE_PATTERNS]
+        self._noise_patterns = [
+            re.compile(p, re.IGNORECASE) for p in DOWNSTREAM_NOISE_PATTERNS
+        ]
         self._signal_patterns = {
-            re.compile(p, re.IGNORECASE): cat
-            for p, cat in HIGH_SIGNAL_PATTERNS.items()
+            re.compile(p, re.IGNORECASE): cat for p, cat in HIGH_SIGNAL_PATTERNS.items()
         }
 
     def correlate(
@@ -111,7 +112,9 @@ class SignalCorrelator:
 
         primary = clusters[0]  # Highest-severity cluster
 
-        all_services = list({svc for cluster in clusters for svc in cluster.affected_services})
+        all_services = list(
+            {svc for cluster in clusters for svc in cluster.affected_services}
+        )
 
         signal_strength = self._compute_signal_strength(signal_alerts, noise_alerts)
 
@@ -120,7 +123,9 @@ class SignalCorrelator:
         # some minutes before the first alert fired. Use the earliest metric-anomaly
         # time if available; fall back to the first alert time minus a heuristic
         # propagation delay so the two fields are always distinct.
-        estimated_start = self._get_earliest_metric_anomaly_time(normalized) or first_signal
+        estimated_start = (
+            self._get_earliest_metric_anomaly_time(normalized) or first_signal
+        )
 
         return CorrelatedIncident(
             alert_clusters=clusters,
@@ -138,19 +143,25 @@ class SignalCorrelator:
         normalized = []
         for alert in alerts:
             if isinstance(alert, str):
-                normalized.append({
-                    "alert": alert,
-                    "service": self._extract_service(alert),
-                    "time": None,
-                    "value": None,
-                })
+                normalized.append(
+                    {
+                        "alert": alert,
+                        "service": self._extract_service(alert),
+                        "time": None,
+                        "value": None,
+                    }
+                )
             elif isinstance(alert, dict):
-                normalized.append({
-                    "alert": alert.get("alert", alert.get("title", str(alert))),
-                    "service": alert.get("service", self._extract_service(str(alert))),
-                    "time": alert.get("time", alert.get("started_at")),
-                    "value": alert.get("value"),
-                })
+                normalized.append(
+                    {
+                        "alert": alert.get("alert", alert.get("title", str(alert))),
+                        "service": alert.get(
+                            "service", self._extract_service(str(alert))
+                        ),
+                        "time": alert.get("time", alert.get("started_at")),
+                        "value": alert.get("value"),
+                    }
+                )
         return normalized
 
     def _separate_signal_noise(
@@ -242,7 +253,9 @@ class SignalCorrelator:
     def _make_single_cluster(self, alerts: list[dict]) -> AlertCluster:
         """Make a single cluster from all alerts."""
         if not alerts:
-            return AlertCluster("cluster_0", "No alerts", [], [], None, 0, "unknown", "low")
+            return AlertCluster(
+                "cluster_0", "No alerts", [], [], None, 0, "unknown", "low"
+            )
         return AlertCluster(
             cluster_id="cluster_0",
             primary_alert=alerts[0]["alert"],
@@ -257,10 +270,16 @@ class SignalCorrelator:
     def _extract_service(self, text: str) -> str:
         """Extract service name from alert text."""
         # Common patterns: "HighErrorRate on orders-svc", "orders-svc: HighLatency"
-        m = re.search(r"(?:on|for)\s+([a-zA-Z0-9_-]+(?:-svc|-service|-api|-worker))", text, re.IGNORECASE)
+        m = re.search(
+            r"(?:on|for)\s+([a-zA-Z0-9_-]+(?:-svc|-service|-api|-worker))",
+            text,
+            re.IGNORECASE,
+        )
         if m:
             return m.group(1)
-        m = re.search(r"([a-zA-Z0-9_-]+(?:-svc|-service|-api|-worker))", text, re.IGNORECASE)
+        m = re.search(
+            r"([a-zA-Z0-9_-]+(?:-svc|-service|-api|-worker))", text, re.IGNORECASE
+        )
         if m:
             return m.group(1)
         return "unknown"

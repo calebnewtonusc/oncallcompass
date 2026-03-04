@@ -14,13 +14,13 @@ Usage:
     steps = engine.get_steps("database", "web_api")
 """
 
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
 
 @dataclass
 class Runbook:
     """A single runbook entry."""
+
     category: str
     service_type: str
     investigation_steps: list[str]
@@ -166,7 +166,9 @@ for rb in BUILTIN_RUNBOOKS:
 
 
 class RunbookEngine:
-    def get_steps(self, alert_type: str, service_category: str = "general") -> list[str]:
+    def get_steps(
+        self, alert_type: str, service_category: str = "general"
+    ) -> list[str]:
         """
         Get investigation steps for an alert type and service category.
 
@@ -185,9 +187,15 @@ class RunbookEngine:
     def get_first_check(self, alert_type: str) -> str:
         """Get the single highest-signal first check for an alert type."""
         runbook = self._find_runbook(alert_type, "general")
-        return runbook.first_check if runbook else f"Check {alert_type} service logs and metrics"
+        return (
+            runbook.first_check
+            if runbook
+            else f"Check {alert_type} service logs and metrics"
+        )
 
-    def get_runbook(self, alert_type: str, service_category: str = "general") -> Runbook | None:
+    def get_runbook(
+        self, alert_type: str, service_category: str = "general"
+    ) -> Runbook | None:
         """Get the full runbook for an alert type."""
         return self._find_runbook(alert_type, service_category)
 

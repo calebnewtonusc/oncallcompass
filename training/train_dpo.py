@@ -22,8 +22,9 @@ from pathlib import Path
 from typing import Any
 
 import torch
-from datasets import Dataset, load_dataset
+from datasets import load_dataset
 from dotenv import load_dotenv
+from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import DPOConfig, DPOTrainer
 
@@ -34,12 +35,15 @@ SYSTEM_PROMPT = """You are OncallCompass. Given incident signals, rank root caus
 
 def format_preference_example(example: dict[str, Any]) -> dict[str, Any]:
     """Format a DPO pair into the prompt/chosen/rejected format."""
-    context = json.dumps({
-        "alerts": example.get("alerts", []),
-        "logs": example.get("logs", ""),
-        "metrics": example.get("metrics", {}),
-        "context": example.get("context", {}),
-    }, indent=2)
+    context = json.dumps(
+        {
+            "alerts": example.get("alerts", []),
+            "logs": example.get("logs", ""),
+            "metrics": example.get("metrics", {}),
+            "context": example.get("context", {}),
+        },
+        indent=2,
+    )
 
     prompt = (
         f"<|im_start|>system\n{SYSTEM_PROMPT}\n<|im_end|>\n"
@@ -50,22 +54,36 @@ def format_preference_example(example: dict[str, Any]) -> dict[str, Any]:
     fast_path = example.get("fast_path", {})
     slow_path = example.get("slow_path", {})
 
-    chosen = json.dumps({
-        "ranked_hypotheses": fast_path.get("ranked_hypotheses", []),
-        "investigation_steps": fast_path.get("investigation_steps", []),
-    })
+    chosen = json.dumps(
+        {
+            "ranked_hypotheses": fast_path.get("ranked_hypotheses", []),
+            "investigation_steps": fast_path.get("investigation_steps", []),
+        }
+    )
 
-    rejected = json.dumps({
-        "ranked_hypotheses": slow_path.get("ranked_hypotheses", []),
-        "investigation_steps": slow_path.get("investigation_steps", []),
-    })
+    rejected = json.dumps(
+        {
+            "ranked_hypotheses": slow_path.get("ranked_hypotheses", []),
+            "investigation_steps": slow_path.get("investigation_steps", []),
+        }
+    )
 
     return {"prompt": prompt, "chosen": chosen, "rejected": rejected}
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="OncallCompass DPO training")
-    parser.add_argument("--model_path", default="checkpoints/rl")
+    parser.add_argument(
+        "--model_path",
+        default="checkpoints/rl",
+        help="Path to PEFT adapter-only RL checkpoint directory",
+    )
+    parser.add_argument(
+        "--base_model",
+        default=None,
+        help="Base model name or path (required when model_path is a PEFT adapter). "
+        "Defaults to model_path when not provided for backwards compatibility.",
+    )
     parser.add_argument("--data_path", default="data/dpo_pairs.jsonl")
     parser.add_argument("--output_dir", default="checkpoints/final")
     parser.add_argument("--num_train_epochs", type=int, default=1)
@@ -79,17 +97,26 @@ def main() -> None:
 
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
 
+    base_model_path = args.base_model or args.model_path
     print(f"Loading tokenizer from {args.model_path}")
     tokenizer = AutoTokenizer.from_pretrained(args.model_path, trust_remote_code=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    print(f"Loading model from {args.model_path}")
-    model = AutoModelForCausalLM.from_pretrained(
-        args.model_path,
+    print(f"Loading base model from {base_model_path}")
+    base = AutoModelForCausalLM.from_pretrained(
+        base_model_path,
         torch_dtype=torch.bfloat16,
         trust_remote_code=True,
     )
+
+    if args.base_model:
+        # RL checkpoint is a PEFT adapter-only directory — wrap with PeftModel.
+        print(f"Loading PEFT adapter from {args.model_path}")
+        model = PeftModel.from_pretrained(base, args.model_path, is_trainable=True)
+    else:
+        # Backwards-compatible path: model_path is a full merged model.
+        model = base
 
     print(f"Loading DPO dataset from {args.data_path}")
     raw_dataset = load_dataset("json", data_files=args.data_path, split="train")
@@ -118,8 +145,10 @@ def main() -> None:
     # Load a frozen reference model so DPO has a proper KL anchor.
     # Using ref_model=None would make the policy serve as its own reference,
     # eliminating the KL constraint and destabilizing training.
+    # Always load the base model (without PEFT) as the frozen reference so
+    # that the KL term measures divergence from the pre-RL base distribution.
     ref_model = AutoModelForCausalLM.from_pretrained(
-        args.model_path, torch_dtype=torch.bfloat16, device_map=None
+        base_model_path, torch_dtype=torch.bfloat16, device_map=None
     )
     ref_model.eval()
 

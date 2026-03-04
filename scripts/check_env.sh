@@ -20,7 +20,7 @@ echo ""
 
 # ── Python packages ──────────────────────────────────────────
 echo "Checking Python packages..."
-python -c "import torch; assert torch.cuda.is_available(); pass()" 2>/dev/null && pass "PyTorch + CUDA" || fail "PyTorch CUDA not available"
+python -c "import torch; assert torch.cuda.is_available()" 2>/dev/null && pass "PyTorch + CUDA" || fail "PyTorch CUDA not available"
 python -c "import transformers" 2>/dev/null && pass "transformers" || fail "transformers not installed"
 python -c "import trl" 2>/dev/null && pass "trl" || fail "trl not installed"
 python -c "import peft" 2>/dev/null && pass "peft" || fail "peft not installed"

@@ -19,21 +19,20 @@ Usage:
 
 import os
 from dataclasses import dataclass, field
-from typing import Any
 
 import anthropic
 from loguru import logger
 
 from agents.hypothesis_agent import HypothesisSet, RankedHypothesis
-from core.incident_taxonomy import IncidentCategory
 from core.runbook_engine import RunbookEngine
 
 
 @dataclass
 class InvestigationFinding:
     """Result of investigating a single hypothesis."""
+
     hypothesis: str
-    status: str              # "confirmed" | "ruled_out" | "inconclusive"
+    status: str  # "confirmed" | "ruled_out" | "inconclusive"
     evidence_found: list[str]
     evidence_against: list[str]
     updated_confidence: float
@@ -43,14 +42,15 @@ class InvestigationFinding:
 @dataclass
 class InvestigationResult:
     """Complete result of the investigation phase."""
+
     confirmed_root_cause: str | None
     confirmed_hypothesis: RankedHypothesis | None
     all_findings: list[InvestigationFinding]
     remaining_hypotheses: list[RankedHypothesis]
     investigation_steps_taken: list[str]
-    context_gathered: dict   # Logs, metrics, etc. gathered during investigation
+    context_gathered: dict  # Logs, metrics, etc. gathered during investigation
     confidence: float
-    verdict: str             # "confirmed" | "narrowed" | "unknown"
+    verdict: str  # "confirmed" | "narrowed" | "unknown"
 
 
 INVESTIGATION_SYSTEM = """You are OncallCompass's Investigation Agent.
@@ -80,7 +80,9 @@ NEXT CHECK: [single most important next step if INCONCLUSIVE]"""
 class InvestigationAgent:
     def __init__(self, model: str = "claude-sonnet-4-6"):
         self.model = model
-        self.client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+        self.client = anthropic.Anthropic(
+            api_key=os.environ.get("ANTHROPIC_API_KEY", "")
+        )
         self.runbook_engine = RunbookEngine()
 
     def investigate(
@@ -102,7 +104,9 @@ class InvestigationAgent:
         """
         all_hypotheses = [hypothesis_set.top_hypothesis] + hypothesis_set.alternatives
         # Track (hypothesis, raw_finding) pairs so we can always match them correctly.
-        hyp_finding_pairs: list[tuple[RankedHypothesis, "_InvestigationFindingInternal"]] = []
+        hyp_finding_pairs: list[
+            tuple[RankedHypothesis, "_InvestigationFindingInternal"]
+        ] = []
         steps_taken = []
         context_gathered = {}
         steps_remaining = max_steps
@@ -153,7 +157,7 @@ class InvestigationAgent:
             best_confidence = best_finding.updated_confidence
         else:
             best_hyp = hypothesis_set.top_hypothesis
-            best_confidence = hypothesis_set.top_hypothesis.confidence
+            best_confidence = best_hyp.confidence if best_hyp else 0.0
 
         verdict = "narrowed" if hyp_finding_pairs else "unknown"
 
@@ -175,7 +179,9 @@ class InvestigationAgent:
         runbook_steps: list[str],
     ) -> "_InvestigationFindingInternal":
         """Use LLM to investigate a single hypothesis."""
-        prompt = self._build_investigation_prompt(hypothesis, incident_context, runbook_steps)
+        prompt = self._build_investigation_prompt(
+            hypothesis, incident_context, runbook_steps
+        )
 
         resp = self.client.messages.create(
             model=self.model,
@@ -187,40 +193,64 @@ class InvestigationAgent:
         return self._parse_investigation_result(text, hypothesis)
 
     def _build_investigation_prompt(
-        self, hypothesis: RankedHypothesis, incident_context: dict, runbook_steps: list[str]
+        self,
+        hypothesis: RankedHypothesis,
+        incident_context: dict,
+        runbook_steps: list[str],
     ) -> str:
         import json
+
         parts = [
             f"## Hypothesis to Investigate\n{hypothesis.hypothesis}\n"
             f"Prior confidence: {hypothesis.confidence:.0%}"
         ]
 
-        parts.append(f"## Current Evidence\n" + "\n".join(f"- {e}" for e in hypothesis.evidence))
+        parts.append(
+            "## Current Evidence\n" + "\n".join(f"- {e}" for e in hypothesis.evidence)
+        )
 
         if hypothesis.ruling_out:
             parts.append(f"## Proposed Ruling-Out Step\n{hypothesis.ruling_out}")
 
-        parts.append(f"## Alert Signals\n" + "\n".join(f"- {a}" for a in incident_context.get("alerts", [])))
+        parts.append(
+            "## Alert Signals\n"
+            + "\n".join(f"- {a}" for a in incident_context.get("alerts", []))
+        )
 
         if incident_context.get("metrics"):
-            parts.append(f"## Metrics\n{json.dumps(incident_context['metrics'], indent=2)}")
+            parts.append(
+                f"## Metrics\n{json.dumps(incident_context['metrics'], indent=2)}"
+            )
 
         if incident_context.get("logs"):
             parts.append(f"## Logs\n```\n{incident_context['logs'][:800]}\n```")
 
         if runbook_steps:
-            parts.append("## Relevant Runbook Steps\n" + "\n".join(f"- {s}" for s in runbook_steps[:4]))
+            parts.append(
+                "## Relevant Runbook Steps\n"
+                + "\n".join(f"- {s}" for s in runbook_steps[:4])
+            )
 
-        parts.append("Determine if this hypothesis is CONFIRMED, RULED_OUT, or INCONCLUSIVE.")
+        parts.append(
+            "Determine if this hypothesis is CONFIRMED, RULED_OUT, or INCONCLUSIVE."
+        )
         return "\n\n".join(parts)
 
-    def _parse_investigation_result(self, text: str, hypothesis: RankedHypothesis) -> "_InvestigationFindingInternal":
+    def _parse_investigation_result(
+        self, text: str, hypothesis: RankedHypothesis
+    ) -> "_InvestigationFindingInternal":
         import re
 
         # Parse STATUS
-        status_m = re.search(r"STATUS:\s*(CONFIRMED|RULED_OUT|INCONCLUSIVE)", text, re.IGNORECASE)
+        status_m = re.search(
+            r"STATUS:\s*(CONFIRMED|RULED_OUT|INCONCLUSIVE)", text, re.IGNORECASE
+        )
         status_raw = status_m.group(1).upper() if status_m else "INCONCLUSIVE"
-        status_map = {"CONFIRMED": "confirmed", "RULED_OUT": "ruled_out", "INCONCLUSIVE": "inconclusive"}
+        status_map = {
+            "CONFIRMED": "confirmed",
+            "RULED_OUT": "ruled_out",
+            "INCONCLUSIVE": "inconclusive",
+        }
         status = status_map.get(status_raw, "inconclusive")
 
         # Parse CONFIDENCE
@@ -230,12 +260,22 @@ class InvestigationAgent:
             confidence /= 100
 
         # Parse evidence lists
-        for_m = re.search(r"EVIDENCE FOR:\s*(.*?)(?=EVIDENCE AGAINST:|NEXT CHECK:|$)", text, re.IGNORECASE | re.DOTALL)
-        against_m = re.search(r"EVIDENCE AGAINST:\s*(.*?)(?=NEXT CHECK:|$)", text, re.IGNORECASE | re.DOTALL)
+        for_m = re.search(
+            r"EVIDENCE FOR:\s*(.*?)(?=EVIDENCE AGAINST:|NEXT CHECK:|$)",
+            text,
+            re.IGNORECASE | re.DOTALL,
+        )
+        against_m = re.search(
+            r"EVIDENCE AGAINST:\s*(.*?)(?=NEXT CHECK:|$)",
+            text,
+            re.IGNORECASE | re.DOTALL,
+        )
         next_m = re.search(r"NEXT CHECK:\s*(.*?)$", text, re.IGNORECASE | re.DOTALL)
 
         evidence_for = re.findall(r"[-•]\s+(.+)", for_m.group(1)) if for_m else []
-        evidence_against = re.findall(r"[-•]\s+(.+)", against_m.group(1)) if against_m else []
+        evidence_against = (
+            re.findall(r"[-•]\s+(.+)", against_m.group(1)) if against_m else []
+        )
         next_check = next_m.group(1).strip()[:200] if next_m else ""
 
         return _InvestigationFindingInternal(
@@ -267,6 +307,7 @@ class InvestigationAgent:
 @dataclass
 class _InvestigationFindingInternal:
     """Internal finding from a single hypothesis investigation."""
+
     status: str
     updated_confidence: float
     evidence_for: list[str] = field(default_factory=list)

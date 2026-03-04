@@ -15,13 +15,14 @@ Usage:
 
 import json
 import os
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, asdict
 from pathlib import Path
 
 from loguru import logger
 
 try:
     import anthropic
+
     HAS_ANTHROPIC = True
 except ImportError:
     HAS_ANTHROPIC = False
@@ -30,16 +31,17 @@ except ImportError:
 @dataclass
 class RunbookEntry:
     """A complete runbook entry with investigation sequence."""
+
     alert_type: str
     service_category: str
     symptoms: list[str]
-    first_check: str            # The single highest-signal first check
+    first_check: str  # The single highest-signal first check
     investigation_sequence: list[dict]  # [{step, rationale, expected_finding}]
-    decision_tree: dict         # Conditional investigation path
+    decision_tree: dict  # Conditional investigation path
     escalation_criteria: list[str]
     common_causes: list[str]
     false_positive_patterns: list[str]
-    estimated_mttr_min: int     # Expected MTTR in minutes
+    estimated_mttr_min: int  # Expected MTTR in minutes
 
 
 # ─────────────────────────────────────────────────────────────
@@ -47,7 +49,6 @@ class RunbookEntry:
 # ─────────────────────────────────────────────────────────────
 
 EXPERT_RUNBOOKS: list[RunbookEntry] = [
-
     RunbookEntry(
         alert_type="HighErrorRate",
         service_category="web_api",
@@ -101,7 +102,6 @@ EXPERT_RUNBOOKS: list[RunbookEntry] = [
         ],
         estimated_mttr_min=25,
     ),
-
     RunbookEntry(
         alert_type="HighLatency",
         service_category="web_api",
@@ -156,7 +156,6 @@ EXPERT_RUNBOOKS: list[RunbookEntry] = [
         ],
         estimated_mttr_min=35,
     ),
-
     RunbookEntry(
         alert_type="OOMKilled",
         service_category="container",
@@ -251,7 +250,9 @@ class RunbookSynthesizer:
 
         return entries
 
-    def _synthesize_single(self, alert_type: str, category: str, scenario: str) -> RunbookEntry | None:
+    def _synthesize_single(
+        self, alert_type: str, category: str, scenario: str
+    ) -> RunbookEntry | None:
         if not self.client:
             return None
 
@@ -280,7 +281,8 @@ Return ONLY valid JSON."""
             )
             text = resp.content[0].text
             import re
-            m = re.search(r"\{.*?\}", text, re.DOTALL)
+
+            m = re.search(r"\{.*\}", text, re.DOTALL)
             if not m:
                 return None
             data = json.loads(m.group())
@@ -319,7 +321,9 @@ Return ONLY valid JSON."""
                         "hypothesis": cause,
                         "confidence": 0.7 - (i * 0.1),
                         "evidence": [],
-                        "ruling_out": rb.investigation_sequence[0]["step"] if rb.investigation_sequence else "",
+                        "ruling_out": rb.investigation_sequence[0]["step"]
+                        if rb.investigation_sequence
+                        else "",
                     }
                     for i, cause in enumerate(rb.common_causes[:3])
                 ],
@@ -330,14 +334,20 @@ Return ONLY valid JSON."""
                     "root_cause": rb.common_causes[0] if rb.common_causes else "",
                     "contributing_factors": rb.false_positive_patterns[:2],
                     "action_items": [
-                        {"item": f"Add monitoring for {rb.alert_type}", "owner": "SRE", "prevents": "Late detection"}
+                        {
+                            "item": f"Add monitoring for {rb.alert_type}",
+                            "owner": "SRE",
+                            "prevents": "Late detection",
+                        }
                     ],
                 },
             }
             pairs.append(pair)
         return pairs
 
-    def save(self, runbooks: list[RunbookEntry], output_path: str = "data/raw/runbooks.jsonl") -> None:
+    def save(
+        self, runbooks: list[RunbookEntry], output_path: str = "data/raw/runbooks.jsonl"
+    ) -> None:
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, "w") as f:
             for rb in runbooks:

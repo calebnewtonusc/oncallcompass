@@ -19,6 +19,7 @@ Usage:
 
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import argparse
@@ -26,15 +27,13 @@ import asyncio
 import json
 import os
 import random
-import time
-from dataclasses import asdict
-from typing import Any
 
 import aiohttp
 from loguru import logger
 
 try:
     import anthropic
+
     HAS_ANTHROPIC = True
 except ImportError:
     HAS_ANTHROPIC = False
@@ -46,7 +45,6 @@ from synthesis.prompts import (
     INCIDENT_SYNTHESIS_USER_TEMPLATE,
     DPO_SYSTEM,
     DPO_USER_TEMPLATE,
-    DRILL_SYNTHESIS_SYSTEM,
 )
 
 # ─────────────────────────────────────────────────────────────
@@ -113,19 +111,32 @@ INCIDENT_TIMES = [
 ]
 
 
-async def call_vllm(client: aiohttp.ClientSession, base_url: str, messages: list, model: str = "Qwen/Qwen2.5-72B-Instruct", api_key: str = "synthesis") -> str:
+async def call_vllm(
+    client: aiohttp.ClientSession,
+    base_url: str,
+    messages: list,
+    model: str = "Qwen/Qwen2.5-72B-Instruct",
+    api_key: str = "synthesis",
+) -> str:
     """Call a vLLM OpenAI-compatible endpoint."""
     resp = await client.post(
         f"{base_url}/v1/chat/completions",
         headers={"Authorization": f"Bearer {api_key}"},
-        json={"model": model, "messages": messages, "max_tokens": 4096, "temperature": 0.8},
+        json={
+            "model": model,
+            "messages": messages,
+            "max_tokens": 4096,
+            "temperature": 0.8,
+        },
         timeout=aiohttp.ClientTimeout(total=120.0),
     )
     resp.raise_for_status()
     return (await resp.json())["choices"][0]["message"]["content"]
 
 
-async def call_claude(client: aiohttp.ClientSession, messages: list, api_key: str, system_prompt: str) -> str:
+async def call_claude(
+    client: aiohttp.ClientSession, messages: list, api_key: str, system_prompt: str
+) -> str:
     """Call the Anthropic Claude API as a fallback."""
     resp = await client.post(
         "https://api.anthropic.com/v1/messages",
@@ -196,7 +207,9 @@ class BulkSynthesizer:
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ]
-            return await call_vllm(session, endpoint, messages, self.model_name, self.vllm_api_key)
+            return await call_vllm(
+                session, endpoint, messages, self.model_name, self.vllm_api_key
+            )
         except Exception as e:
             logger.debug(f"vLLM call failed at {endpoint}: {e}")
             return None
@@ -217,7 +230,9 @@ class BulkSynthesizer:
             logger.error(f"Anthropic API error: {e}")
             return None
 
-    def _call_anthropic(self, system: str, user: str, max_tokens: int = 2048) -> str | None:
+    def _call_anthropic(
+        self, system: str, user: str, max_tokens: int = 2048
+    ) -> str | None:
         """Synchronous Anthropic API fallback (legacy)."""
         if not HAS_ANTHROPIC or not self.anthropic_key:
             return None
@@ -239,6 +254,7 @@ class BulkSynthesizer:
         if not text:
             return None
         import re
+
         # Try direct parse
         try:
             return json.loads(text.strip())
@@ -263,11 +279,8 @@ class BulkSynthesizer:
         count = 0
         async with aiohttp.ClientSession() as session:
             for i in range(0, len(raw_docs), batch_size):
-                batch = raw_docs[i:i+batch_size]
-                tasks = [
-                    self._synthesize_sft_single(session, doc)
-                    for doc in batch
-                ]
+                batch = raw_docs[i : i + batch_size]
+                tasks = [self._synthesize_sft_single(session, doc) for doc in batch]
                 results = await asyncio.gather(*tasks, return_exceptions=True)
 
                 with open(output_path, "a") as f:
@@ -276,7 +289,9 @@ class BulkSynthesizer:
                             f.write(json.dumps(result) + "\n")
                             count += 1
 
-                logger.info(f"SFT synthesis: {i+len(batch)}/{len(raw_docs)} ({count} pairs generated)")
+                logger.info(
+                    f"SFT synthesis: {i + len(batch)}/{len(raw_docs)} ({count} pairs generated)"
+                )
 
         return count
 
@@ -314,7 +329,9 @@ class BulkSynthesizer:
             for template in FAILURE_MODES:
                 for _ in range(n_per_template):
                     incident_time = random.choice(INCIDENT_TIMES)
-                    tasks.append(self._synthesize_from_template(session, template, incident_time))
+                    tasks.append(
+                        self._synthesize_from_template(session, template, incident_time)
+                    )
 
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -367,11 +384,14 @@ class BulkSynthesizer:
         self, session: aiohttp.ClientSession, pair: dict
     ) -> dict | None:
         root_cause = pair.get("postmortem_draft", {}).get("root_cause", "")
-        incident_json = json.dumps({
-            "alerts": pair.get("alerts", []),
-            "context": pair.get("context", {}),
-            "logs": pair.get("logs", ""),
-        }, indent=2)
+        incident_json = json.dumps(
+            {
+                "alerts": pair.get("alerts", []),
+                "context": pair.get("context", {}),
+                "logs": pair.get("logs", ""),
+            },
+            indent=2,
+        )
 
         user = DPO_USER_TEMPLATE.format(
             incident_json=incident_json[:3000],
@@ -389,8 +409,11 @@ def main():
     parser.add_argument("--output_dir", default="data")
     parser.add_argument("--vllm_endpoint_1", default=os.environ.get("VLLM_ENDPOINT_1"))
     parser.add_argument("--vllm_endpoint_2", default=os.environ.get("VLLM_ENDPOINT_2"))
-    parser.add_argument("--vllm_urls", default=os.environ.get("VLLM_URLS", ""),
-                        help="Comma-separated vLLM endpoints, e.g. http://localhost:8001,http://localhost:8002")
+    parser.add_argument(
+        "--vllm_urls",
+        default=os.environ.get("VLLM_URLS", ""),
+        help="Comma-separated vLLM endpoints, e.g. http://localhost:8001,http://localhost:8002",
+    )
     parser.add_argument("--model_name", default="Qwen/Qwen2.5-72B-Instruct")
     parser.add_argument("--n_per_template", type=int, default=3)
     args = parser.parse_args()
@@ -430,7 +453,9 @@ def main():
     sft_from_raw = asyncio.run(synthesizer.synthesize_sft_pairs(raw_docs, sft_path))
 
     # SFT from templates (augmentation)
-    sft_from_templates = asyncio.run(synthesizer.synthesize_from_templates(sft_path, args.n_per_template))
+    sft_from_templates = asyncio.run(
+        synthesizer.synthesize_from_templates(sft_path, args.n_per_template)
+    )
 
     # Load all SFT pairs for DPO
     sft_pairs = []
@@ -445,12 +470,16 @@ def main():
 
     # DPO pairs
     dpo_path = output_dir / "dpo_pairs.jsonl"
-    dpo_count = asyncio.run(synthesizer.synthesize_dpo_pairs(
-        random.sample(sft_pairs, min(len(sft_pairs), max(1, len(sft_pairs) // 3))),
-        dpo_path,
-    ))
+    dpo_count = asyncio.run(
+        synthesizer.synthesize_dpo_pairs(
+            random.sample(sft_pairs, min(len(sft_pairs), max(1, len(sft_pairs) // 3))),
+            dpo_path,
+        )
+    )
 
-    logger.info(f"Synthesis complete: {sft_from_raw + sft_from_templates} SFT, {dpo_count} DPO")
+    logger.info(
+        f"Synthesis complete: {sft_from_raw + sft_from_templates} SFT, {dpo_count} DPO"
+    )
 
 
 if __name__ == "__main__":

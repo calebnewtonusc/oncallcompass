@@ -39,9 +39,10 @@ BASELINE_STEPS = 8  # Median for unguided investigation
 @dataclass
 class DrillResult:
     """Result for a single drill scenario."""
+
     drill_id: str
     correct_root_cause: str
-    model_root_cause_rank: int | None   # None if not surfaced
+    model_root_cause_rank: int | None  # None if not surfaced
     model_hypotheses_count: int
     model_steps_count: int
     expert_steps_count: int
@@ -57,6 +58,7 @@ class DrillResult:
 @dataclass
 class CompassBenchResults:
     """Aggregate results across all drills."""
+
     model_path: str
     drill_count: int
     rca_at_1: float
@@ -83,7 +85,8 @@ def compute_step_precision(model_steps: list[str], expert_steps: list[str]) -> f
 
     expert_lower = {s.lower() for s in expert_steps}
     matches = sum(
-        1 for step in model_steps
+        1
+        for step in model_steps
         if any(keyword in step.lower() for keyword in _extract_keywords(expert_lower))
     )
     return matches / len(model_steps)
@@ -128,8 +131,11 @@ def compute_postmortem_quality(postmortem: dict[str, Any]) -> float:
     action_items = postmortem.get("action_items", [])
     if isinstance(action_items, list):
         prevention_items = [
-            item for item in action_items
-            if isinstance(item, dict) and item.get("prevents") and len(item.get("prevents", "")) > 5
+            item
+            for item in action_items
+            if isinstance(item, dict)
+            and item.get("prevents")
+            and len(item.get("prevents", "")) > 5
         ]
         if prevention_items:
             score += 1.0
@@ -137,13 +143,20 @@ def compute_postmortem_quality(postmortem: dict[str, Any]) -> float:
     return score / max_score
 
 
-def find_root_cause_rank(hypotheses: list[dict[str, Any]], correct_root_cause: str) -> int | None:
+def find_root_cause_rank(
+    hypotheses: list[dict[str, Any]], correct_root_cause: str
+) -> int | None:
     """Find the rank of the correct root cause in the model's hypothesis list."""
     correct_lower = correct_root_cause.lower()
     for i, hyp in enumerate(hypotheses):
         hypothesis_text = hyp.get("hypothesis", "").lower()
         # Fuzzy match: check if key terms from correct cause appear in hypothesis
         correct_terms = [t for t in correct_lower.split() if len(t) > 4]
+        # Fallback: if the root cause only contains short words (e.g. "DNS down"),
+        # none pass the len>4 filter — use all words instead so RCA metrics
+        # are not always zero for short-word root causes.
+        if not correct_terms:
+            correct_terms = correct_lower.split()
         if any(term in hypothesis_text for term in correct_terms):
             return i + 1
     return None
@@ -169,8 +182,7 @@ def generate_model_response(
     latency_ms = (time.time() - start) * 1000
 
     generated = tokenizer.decode(
-        output[0][inputs["input_ids"].shape[1]:],
-        skip_special_tokens=True
+        output[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True
     )
 
     try:
@@ -178,7 +190,8 @@ def generate_model_response(
     except json.JSONDecodeError:
         # Try to extract JSON from response
         import re
-        match = re.search(r'\{.*\}', generated, re.DOTALL)
+
+        match = re.search(r"\{.*\}", generated, re.DOTALL)
         if match:
             try:
                 response = json.loads(match.group())
@@ -193,12 +206,15 @@ def generate_model_response(
 def build_drill_prompt(drill: dict[str, Any]) -> str:
     """Format a drill scenario as a model prompt."""
     # Hide ground truth from the model
-    context = json.dumps({
-        "alerts": drill.get("alerts", []),
-        "logs": drill.get("logs", ""),
-        "metrics": drill.get("metrics", {}),
-        "context": drill.get("context", {}),
-    }, indent=2)
+    context = json.dumps(
+        {
+            "alerts": drill.get("alerts", []),
+            "logs": drill.get("logs", ""),
+            "metrics": drill.get("metrics", {}),
+            "context": drill.get("context", {}),
+        },
+        indent=2,
+    )
 
     return (
         "<|im_start|>system\n"
@@ -231,11 +247,15 @@ def evaluate_drill(
     mrr = compute_mrr(correct_rank)
     rca_at_1 = correct_rank == 1
     rca_at_3 = correct_rank is not None and correct_rank <= 3
+    # Use per-drill baseline_steps from ground truth when available so that
+    # drills with a known expert baseline are evaluated on their own baseline
+    # rather than the global constant.
+    drill_baseline = ground_truth.get("baseline_steps", BASELINE_STEPS)
     # Only award positive MTTR reduction when the correct root cause was ranked first.
     # Otherwise a brief but wrong response would score positively on this metric.
     mttr_reduction = (
-        (BASELINE_STEPS - len(model_steps)) / BASELINE_STEPS
-        if (model_steps and rca_at_1)
+        (drill_baseline - len(model_steps)) / drill_baseline
+        if (model_steps and rca_at_1 and drill_baseline > 0)
         else 0.0
     )
     step_precision = compute_step_precision(model_steps, expert_steps)
@@ -268,10 +288,22 @@ def print_results_table(results: CompassBenchResults) -> None:
     table.add_row("RCA@1", f"{results.rca_at_1:.1%}", "Correct root cause ranked first")
     table.add_row("RCA@3", f"{results.rca_at_3:.1%}", "Correct root cause in top 3")
     table.add_row("MRR", f"{results.mrr:.3f}", "Mean Reciprocal Rank")
-    table.add_row("MTTR Reduction", f"{results.mttr_reduction:.1%}", "Steps saved vs. baseline")
-    table.add_row("Step Precision", f"{results.step_precision:.1%}", "Fraction of steps matching expert path")
-    table.add_row("Postmortem Quality", f"{results.postmortem_quality:.1%}", "Postmortem completeness score")
-    table.add_row("Mean Latency", f"{results.mean_latency_ms:.0f}ms", "Model response time")
+    table.add_row(
+        "MTTR Reduction", f"{results.mttr_reduction:.1%}", "Steps saved vs. baseline"
+    )
+    table.add_row(
+        "Step Precision",
+        f"{results.step_precision:.1%}",
+        "Fraction of steps matching expert path",
+    )
+    table.add_row(
+        "Postmortem Quality",
+        f"{results.postmortem_quality:.1%}",
+        "Postmortem completeness score",
+    )
+    table.add_row(
+        "Mean Latency", f"{results.mean_latency_ms:.0f}ms", "Model response time"
+    )
     table.add_row("Drills Evaluated", str(results.drill_count), "Total drill scenarios")
 
     console.print(table)
@@ -301,7 +333,7 @@ def main() -> None:
                 drills.append(json.loads(line))
 
     if args.max_drills:
-        drills = drills[:args.max_drills]
+        drills = drills[: args.max_drills]
 
     console.print(f"Loaded {len(drills)} drill scenarios")
 
@@ -325,6 +357,9 @@ def main() -> None:
 
     # Aggregate
     n = len(drill_results)
+    if n == 0:
+        console.print("[red]No drills evaluated.[/red]")
+        return
     aggregate = CompassBenchResults(
         model_path=args.model_path,
         drill_count=n,

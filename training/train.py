@@ -50,18 +50,24 @@ Always respond in valid JSON matching the OncallCompass output schema."""
 
 def build_prompt(example: dict[str, Any]) -> str:
     """Format an SFT example into a chat template prompt."""
-    user_content = json.dumps({
-        "alerts": example.get("alerts", []),
-        "logs": example.get("logs", ""),
-        "metrics": example.get("metrics", {}),
-        "context": example.get("context", {}),
-    }, indent=2)
+    user_content = json.dumps(
+        {
+            "alerts": example.get("alerts", []),
+            "logs": example.get("logs", ""),
+            "metrics": example.get("metrics", {}),
+            "context": example.get("context", {}),
+        },
+        indent=2,
+    )
 
-    assistant_content = json.dumps({
-        "ranked_hypotheses": example.get("ranked_hypotheses", []),
-        "investigation_steps": example.get("investigation_steps", []),
-        "postmortem_draft": example.get("postmortem_draft", {}),
-    }, indent=2)
+    assistant_content = json.dumps(
+        {
+            "ranked_hypotheses": example.get("ranked_hypotheses", []),
+            "investigation_steps": example.get("investigation_steps", []),
+            "postmortem_draft": example.get("postmortem_draft", {}),
+        },
+        indent=2,
+    )
 
     return (
         f"<|im_start|>system\n{SYSTEM_PROMPT}<|im_end|>\n"
@@ -131,8 +137,13 @@ def main() -> None:
         lora_alpha=128,
         lora_dropout=0.05,
         target_modules=[
-            "q_proj", "k_proj", "v_proj", "o_proj",
-            "gate_proj", "up_proj", "down_proj",
+            "q_proj",
+            "k_proj",
+            "v_proj",
+            "o_proj",
+            "gate_proj",
+            "up_proj",
+            "down_proj",
         ],
         bias="none",
     )

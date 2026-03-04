@@ -15,13 +15,12 @@ reward:
 training:
   output_dir: checkpoints/rl
   num_train_epochs: 2
-  ppo_epochs: 4
   batch_size: 8
-  mini_batch_size: 2
+  num_generations: 8
   learning_rate: 1.0e-5
   logging_steps: 10
   bf16: true
-  report_to: wandb
+  report_to: none
   run_name: oncallcompass-rl
 
 data:

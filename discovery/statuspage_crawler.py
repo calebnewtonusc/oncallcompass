@@ -25,7 +25,7 @@ Usage:
 import asyncio
 import json
 import re
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -37,16 +37,17 @@ from loguru import logger
 @dataclass
 class StatuspageIncident:
     """A resolved incident from a Statuspage.io API."""
+
     provider: str
     incident_id: str
     title: str
-    impact: str                       # none|minor|major|critical
-    status: str                        # resolved
+    impact: str  # none|minor|major|critical
+    status: str  # resolved
     created_at: str
     resolved_at: str
     duration_minutes: int
     affected_components: list[str]
-    update_stream: list[dict]          # [{time, status, body}] chronological
+    update_stream: list[dict]  # [{time, status, body}] chronological
     root_cause: str
     resolution_summary: str
     has_root_cause: bool
@@ -55,26 +56,59 @@ class StatuspageIncident:
 
 # All known Statuspage.io-compatible public APIs
 STATUSPAGE_SOURCES = [
-    {"provider": "github",      "url": "https://www.githubstatus.com/api/v2/incidents.json"},
-    {"provider": "cloudflare",  "url": "https://www.cloudflarestatus.com/api/v2/incidents.json"},
-    {"provider": "stripe",      "url": "https://status.stripe.com/api/v2/incidents.json"},
-    {"provider": "twilio",      "url": "https://status.twilio.com/api/v2/incidents.json"},
-    {"provider": "heroku",      "url": "https://status.heroku.com/api/v2/incidents.json"},
-    {"provider": "pagerduty",   "url": "https://status.pagerduty.com/api/v2/incidents.json"},
-    {"provider": "datadog",     "url": "https://status.datadoghq.com/api/v2/incidents.json"},
-    {"provider": "atlassian",   "url": "https://jira-software.status.atlassian.com/api/v2/incidents.json"},
-    {"provider": "shopify",     "url": "https://www.shopifystatus.com/api/v2/incidents.json"},
-    {"provider": "sendgrid",    "url": "https://status.sendgrid.com/api/v2/incidents.json"},
-    {"provider": "fastly",      "url": "https://status.fastly.com/api/v2/incidents.json"},
-    {"provider": "zendesk",     "url": "https://status.zendesk.com/api/v2/incidents.json"},
-    {"provider": "circleci",    "url": "https://status.circleci.com/api/v2/incidents.json"},
-    {"provider": "npm",         "url": "https://www.npmjs.com/status/api/v2/incidents.json"},
-    {"provider": "digitalocean","url": "https://status.digitalocean.com/api/v2/incidents.json"},
-    {"provider": "discord",     "url": "https://discordstatus.com/api/v2/incidents.json"},
-    {"provider": "notion",      "url": "https://www.notionstatuspage.com/api/v2/incidents.json"},
-    {"provider": "vercel",      "url": "https://www.vercel-status.com/api/v2/incidents.json"},
-    {"provider": "confluent",   "url": "https://status.confluent.cloud/api/v2/incidents.json"},
-    {"provider": "elastic",     "url": "https://status.elastic.co/api/v2/incidents.json"},
+    {"provider": "github", "url": "https://www.githubstatus.com/api/v2/incidents.json"},
+    {
+        "provider": "cloudflare",
+        "url": "https://www.cloudflarestatus.com/api/v2/incidents.json",
+    },
+    {"provider": "stripe", "url": "https://status.stripe.com/api/v2/incidents.json"},
+    {"provider": "twilio", "url": "https://status.twilio.com/api/v2/incidents.json"},
+    {"provider": "heroku", "url": "https://status.heroku.com/api/v2/incidents.json"},
+    {
+        "provider": "pagerduty",
+        "url": "https://status.pagerduty.com/api/v2/incidents.json",
+    },
+    {
+        "provider": "datadog",
+        "url": "https://status.datadoghq.com/api/v2/incidents.json",
+    },
+    {
+        "provider": "atlassian",
+        "url": "https://jira-software.status.atlassian.com/api/v2/incidents.json",
+    },
+    {
+        "provider": "shopify",
+        "url": "https://www.shopifystatus.com/api/v2/incidents.json",
+    },
+    {
+        "provider": "sendgrid",
+        "url": "https://status.sendgrid.com/api/v2/incidents.json",
+    },
+    {"provider": "fastly", "url": "https://status.fastly.com/api/v2/incidents.json"},
+    {"provider": "zendesk", "url": "https://status.zendesk.com/api/v2/incidents.json"},
+    {
+        "provider": "circleci",
+        "url": "https://status.circleci.com/api/v2/incidents.json",
+    },
+    {"provider": "npm", "url": "https://www.npmjs.com/status/api/v2/incidents.json"},
+    {
+        "provider": "digitalocean",
+        "url": "https://status.digitalocean.com/api/v2/incidents.json",
+    },
+    {"provider": "discord", "url": "https://discordstatus.com/api/v2/incidents.json"},
+    {
+        "provider": "notion",
+        "url": "https://www.notionstatuspage.com/api/v2/incidents.json",
+    },
+    {
+        "provider": "vercel",
+        "url": "https://www.vercel-status.com/api/v2/incidents.json",
+    },
+    {
+        "provider": "confluent",
+        "url": "https://status.confluent.cloud/api/v2/incidents.json",
+    },
+    {"provider": "elastic", "url": "https://status.elastic.co/api/v2/incidents.json"},
 ]
 
 ROOT_CAUSE_PATTERNS = [
@@ -96,10 +130,10 @@ def _parse_datetime(dt_str: str) -> Optional[datetime]:
     # Normalize offset variants: replace +00:00 with Z for uniform handling.
     normalized = dt_str.strip().replace("+00:00", "Z").replace(" ", "T")
     for fmt in (
-        "%Y-%m-%dT%H:%M:%S.%fZ",   # with microseconds + Z
-        "%Y-%m-%dT%H:%M:%SZ",       # without microseconds + Z
-        "%Y-%m-%dT%H:%M:%S.%f",     # with microseconds, no suffix
-        "%Y-%m-%dT%H:%M:%S",        # bare datetime
+        "%Y-%m-%dT%H:%M:%S.%fZ",  # with microseconds + Z
+        "%Y-%m-%dT%H:%M:%SZ",  # without microseconds + Z
+        "%Y-%m-%dT%H:%M:%S.%f",  # with microseconds, no suffix
+        "%Y-%m-%dT%H:%M:%S",  # bare datetime
     ):
         try:
             return datetime.strptime(normalized, fmt)
@@ -151,15 +185,15 @@ def _parse_incident(raw: dict, provider: str) -> Optional[StatuspageIncident]:
         ]
 
         # Gather resolution text (last few updates for richer root cause extraction)
-        resolution_text = " ".join(
-            u.get("body", "") for u in updates[-3:]
-        )
+        resolution_text = " ".join(u.get("body", "") for u in updates[-3:])
         root_cause = _extract_root_cause(resolution_text)
 
         resolution_update = next(
             (u for u in reversed(updates) if u.get("status") == "resolved"), None
         )
-        resolution_summary = resolution_update["body"][:800] if resolution_update else ""
+        resolution_summary = (
+            resolution_update["body"][:800] if resolution_update else ""
+        )
 
         affected = [
             c.get("name", "")
@@ -262,7 +296,8 @@ async def crawl_all_statuspages(
 
     # Quality filter: must have root cause and duration
     quality = [
-        i for i in all_incidents
+        i
+        for i in all_incidents
         if i.has_root_cause and i.duration_minutes > 0 and len(i.update_stream) >= 2
     ]
 
@@ -304,7 +339,10 @@ async def crawl_all_statuspages(
     with open(out_path / "summary.json", "w") as f:
         json.dump(summary, f, indent=2)
 
-    logger.info("Provider breakdown: " + ", ".join(f"{p}={n}" for p, n in sorted(summary.items())))
+    logger.info(
+        "Provider breakdown: "
+        + ", ".join(f"{p}={n}" for p, n in sorted(summary.items()))
+    )
     return deduped
 
 
@@ -324,18 +362,20 @@ def build_training_records(incidents: list[StatuspageIncident]) -> list[dict]:
             for u in inc.update_stream
         )
 
-        records.append({
-            "provider": inc.provider,
-            "incident_id": inc.incident_id,
-            "title": inc.title,
-            "impact": inc.impact,
-            "duration_minutes": inc.duration_minutes,
-            "affected_components": inc.affected_components,
-            "incident_update_stream": stream_text,
-            "root_cause": inc.root_cause,
-            "resolution": inc.resolution_summary,
-            "incident_url": inc.incident_url,
-        })
+        records.append(
+            {
+                "provider": inc.provider,
+                "incident_id": inc.incident_id,
+                "title": inc.title,
+                "impact": inc.impact,
+                "duration_minutes": inc.duration_minutes,
+                "affected_components": inc.affected_components,
+                "incident_update_stream": stream_text,
+                "root_cause": inc.root_cause,
+                "resolution": inc.resolution_summary,
+                "incident_url": inc.incident_url,
+            }
+        )
 
     return records
 
@@ -345,8 +385,11 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Crawl Statuspage.io incident APIs")
     parser.add_argument("--output", default="data/raw/statuspages")
-    parser.add_argument("--training-records", action="store_true",
-                        help="Also output formatted training records")
+    parser.add_argument(
+        "--training-records",
+        action="store_true",
+        help="Also output formatted training records",
+    )
     args = parser.parse_args()
 
     incidents = asyncio.run(crawl_all_statuspages(output_dir=args.output))

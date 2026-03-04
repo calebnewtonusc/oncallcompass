@@ -33,7 +33,7 @@ training:
   dataset_text_field: text
   save_strategy: epoch
   logging_steps: 10
-  report_to: wandb
+  report_to: none
   run_name: oncallcompass-sft
 
 data:

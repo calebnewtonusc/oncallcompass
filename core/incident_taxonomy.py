@@ -14,7 +14,7 @@ Used by:
 """
 
 from enum import Enum
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 
@@ -38,11 +38,12 @@ class SeverityLevel(Enum):
 @dataclass
 class FailureSignature:
     """Signature pattern that identifies an incident category."""
+
     category: IncidentCategory
-    alert_keywords: list[str]        # Keywords in alert titles
+    alert_keywords: list[str]  # Keywords in alert titles
     metric_patterns: dict[str, Any]  # {metric_name: condition}
-    log_patterns: list[str]          # Regex patterns in logs
-    confidence_boost: float          # How strongly this signature indicates the category
+    log_patterns: list[str]  # Regex patterns in logs
+    confidence_boost: float  # How strongly this signature indicates the category
     description: str
 
 
@@ -51,12 +52,20 @@ class FailureSignature:
 # ─────────────────────────────────────────────────────────────
 
 FAILURE_SIGNATURES: list[FailureSignature] = [
-
     # Database signatures
     FailureSignature(
         category=IncidentCategory.DATABASE,
-        alert_keywords=["slow query", "connection pool", "replication lag", "deadlock",
-                        "postgres", "mysql", "database", "db_", "query"],
+        alert_keywords=[
+            "slow query",
+            "connection pool",
+            "replication lag",
+            "deadlock",
+            "postgres",
+            "mysql",
+            "database",
+            "db_",
+            "query",
+        ],
         metric_patterns={"db_latency_ms": ">500", "db_connections": "near_max"},
         log_patterns=[
             r"connection pool.*exhausted",
@@ -68,12 +77,20 @@ FAILURE_SIGNATURES: list[FailureSignature] = [
         confidence_boost=0.25,
         description="Database-related failure (slow queries, connections, replication)",
     ),
-
     # Network signatures
     FailureSignature(
         category=IncidentCategory.NETWORK,
-        alert_keywords=["dns", "tls", "ssl", "certificate", "network", "timeout",
-                        "connection refused", "unreachable", "bgp"],
+        alert_keywords=[
+            "dns",
+            "tls",
+            "ssl",
+            "certificate",
+            "network",
+            "timeout",
+            "connection refused",
+            "unreachable",
+            "bgp",
+        ],
         metric_patterns={"tcp_errors": ">0", "dns_resolution_ms": ">200"},
         log_patterns=[
             r"connection\s+refused",
@@ -85,12 +102,18 @@ FAILURE_SIGNATURES: list[FailureSignature] = [
         confidence_boost=0.20,
         description="Network-related failure (DNS, TLS, timeouts, routing)",
     ),
-
     # Memory signatures
     FailureSignature(
         category=IncidentCategory.MEMORY,
-        alert_keywords=["oom", "memory", "heap", "oomkilled", "out of memory",
-                        "gc pressure", "swap"],
+        alert_keywords=[
+            "oom",
+            "memory",
+            "heap",
+            "oomkilled",
+            "out of memory",
+            "gc pressure",
+            "swap",
+        ],
         metric_patterns={"memory_pct": ">90", "gc_pause_ms": ">500"},
         log_patterns=[
             r"out\s+of\s+memory",
@@ -102,12 +125,18 @@ FAILURE_SIGNATURES: list[FailureSignature] = [
         confidence_boost=0.30,
         description="Memory pressure or OOM (leak, unbounded data, GC)",
     ),
-
     # Deployment signatures
     FailureSignature(
         category=IncidentCategory.DEPLOYMENT,
-        alert_keywords=["deploy", "rollout", "release", "version", "update",
-                        "migration", "config change"],
+        alert_keywords=[
+            "deploy",
+            "rollout",
+            "release",
+            "version",
+            "update",
+            "migration",
+            "config change",
+        ],
         metric_patterns={},
         log_patterns=[
             r"deployment.*started",
@@ -118,12 +147,17 @@ FAILURE_SIGNATURES: list[FailureSignature] = [
         confidence_boost=0.35,  # High boost: deploy correlation is very diagnostic
         description="Deployment or configuration change caused incident",
     ),
-
     # Cascading failure signatures
     FailureSignature(
         category=IncidentCategory.CASCADE,
-        alert_keywords=["cascade", "downstream", "upstream", "circuit breaker",
-                        "dependency", "multiple services"],
+        alert_keywords=[
+            "cascade",
+            "downstream",
+            "upstream",
+            "circuit breaker",
+            "dependency",
+            "multiple services",
+        ],
         metric_patterns={},
         log_patterns=[
             r"circuit\s+breaker.*open",
@@ -133,12 +167,21 @@ FAILURE_SIGNATURES: list[FailureSignature] = [
         confidence_boost=0.15,
         description="Cascading failure across multiple services",
     ),
-
     # External dependency signatures
     FailureSignature(
         category=IncidentCategory.EXTERNAL,
-        alert_keywords=["stripe", "twilio", "sendgrid", "aws", "gcp", "azure",
-                        "third.party", "external", "cdn", "payment"],
+        alert_keywords=[
+            "stripe",
+            "twilio",
+            "sendgrid",
+            "aws",
+            "gcp",
+            "azure",
+            "third.party",
+            "external",
+            "cdn",
+            "payment",
+        ],
         metric_patterns={},
         log_patterns=[
             r"external.*api.*error",
@@ -157,12 +200,29 @@ FAILURE_SIGNATURES: list[FailureSignature] = [
 
 CAUSAL_GRAPH: dict[str, list[list[str]]] = {
     IncidentCategory.DATABASE.value: [
-        ["missing_index", "seq_scan", "slow_query", "connection_pool_exhaustion", "api_timeout"],
+        [
+            "missing_index",
+            "seq_scan",
+            "slow_query",
+            "connection_pool_exhaustion",
+            "api_timeout",
+        ],
         ["connection_leak", "pool_exhaustion", "request_queuing", "latency_spike"],
-        ["replication_lag", "read_replica_stale", "cache_invalidation_storm", "db_overload"],
+        [
+            "replication_lag",
+            "read_replica_stale",
+            "cache_invalidation_storm",
+            "db_overload",
+        ],
     ],
     IncidentCategory.MEMORY.value: [
-        ["memory_leak", "gradual_exhaustion", "oom_kill", "pod_restart", "traffic_spike_on_restart"],
+        [
+            "memory_leak",
+            "gradual_exhaustion",
+            "oom_kill",
+            "pod_restart",
+            "traffic_spike_on_restart",
+        ],
         ["large_query", "unbounded_result_set", "memory_spike", "oom_kill"],
     ],
     IncidentCategory.DEPLOYMENT.value: [
@@ -171,13 +231,20 @@ CAUSAL_GRAPH: dict[str, list[list[str]]] = {
         ["database_migration", "schema_change", "query_failure"],
     ],
     IncidentCategory.CASCADE.value: [
-        ["service_a_failure", "service_b_timeout", "connection_pool_b_exhaustion", "service_c_errors"],
+        [
+            "service_a_failure",
+            "service_b_timeout",
+            "connection_pool_b_exhaustion",
+            "service_c_errors",
+        ],
         ["database_slow", "api_latency", "frontend_timeout", "user_facing_errors"],
     ],
 }
 
 
-def classify_from_signals(alerts: list[str], metrics: dict, logs: str = "") -> IncidentCategory:
+def classify_from_signals(
+    alerts: list[str], metrics: dict, logs: str = ""
+) -> IncidentCategory:
     """
     Classify incident category from observable signals.
 
@@ -191,7 +258,9 @@ def classify_from_signals(alerts: list[str], metrics: dict, logs: str = "") -> I
         # Check alert keywords
         keyword_hits = sum(1 for kw in sig.alert_keywords if kw in combined_text)
         if keyword_hits > 0:
-            scores[sig.category] += sig.confidence_boost * (keyword_hits / len(sig.alert_keywords))
+            scores[sig.category] += sig.confidence_boost * (
+                keyword_hits / len(sig.alert_keywords)
+            )
 
         # Check metric patterns (simple threshold check)
         for metric, condition in sig.metric_patterns.items():

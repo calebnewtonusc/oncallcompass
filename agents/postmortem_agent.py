@@ -23,9 +23,7 @@ Usage:
 
 import os
 import re
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any
+from dataclasses import dataclass
 
 import anthropic
 from loguru import logger
@@ -42,6 +40,7 @@ def _parse_int_field(value: object) -> int:
 @dataclass
 class FiveWhyAnalysis:
     """Structured 5-Why root cause analysis."""
+
     why_1: str  # Service failure symptom
     why_2: str  # Immediate cause
     why_3: str  # System cause
@@ -53,18 +52,20 @@ class FiveWhyAnalysis:
 @dataclass
 class ActionItem:
     """A single postmortem action item."""
+
     item: str
-    owner: str        # Team or system layer responsible
-    prevents: str     # What recurrence this prevents
-    priority: str     # "immediate" | "short_term" | "long_term"
-    deadline: str     # e.g., "within 1 week"
+    owner: str  # Team or system layer responsible
+    prevents: str  # What recurrence this prevents
+    priority: str  # "immediate" | "short_term" | "long_term"
+    deadline: str  # e.g., "within 1 week"
 
 
 @dataclass
 class Postmortem:
     """Complete structured postmortem."""
+
     title: str
-    severity: str        # P0/P1/P2/P3
+    severity: str  # P0/P1/P2/P3
     start_time: str
     end_time: str
     duration_minutes: int
@@ -72,15 +73,15 @@ class Postmortem:
     user_impact: str
 
     executive_summary: str
-    timeline: list[dict]   # [{time, event, type}]
+    timeline: list[dict]  # [{time, event, type}]
     five_why: FiveWhyAnalysis
     root_cause: str
     contributing_factors: list[str]
     action_items: list[ActionItem]
 
-    detection_time_min: int   # Time from incident start to alert
-    ttr_min: int              # Time to resolve
-    mttr_baseline_min: int    # Baseline MTTR for this incident type
+    detection_time_min: int  # Time from incident start to alert
+    ttr_min: int  # Time to resolve
+    mttr_baseline_min: int  # Baseline MTTR for this incident type
 
 
 POSTMORTEM_SYSTEM = """You are OncallCompass's Postmortem Writer — an expert at turning incident data
@@ -110,7 +111,9 @@ Return ONLY valid JSON."""
 class PostmortemAgent:
     def __init__(self, model: str = "claude-sonnet-4-6"):
         self.model = model
-        self.client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+        self.client = anthropic.Anthropic(
+            api_key=os.environ.get("ANTHROPIC_API_KEY", "")
+        )
 
     def generate(
         self,
@@ -150,13 +153,14 @@ class PostmortemAgent:
         investigation_steps: list[str] | None,
     ) -> str:
         import json
+
         parts = []
 
         alerts = incident.get("alerts", [])
         ctx = incident.get("context", {})
 
         parts.append(f"## Confirmed Root Cause\n{confirmed_root_cause}")
-        parts.append(f"## Alert Signals\n" + "\n".join(f"- {a}" for a in alerts))
+        parts.append("## Alert Signals\n" + "\n".join(f"- {a}" for a in alerts))
 
         if ctx.get("stack"):
             parts.append(f"## Affected Stack\n{', '.join(ctx['stack'])}")
@@ -165,16 +169,24 @@ class PostmortemAgent:
             parts.append(f"## Last Deploy\n{ctx['last_deploy']}")
 
         if incident.get("metrics"):
-            parts.append(f"## Peak Metrics\n{json.dumps(incident['metrics'], indent=2)}")
+            parts.append(
+                f"## Peak Metrics\n{json.dumps(incident['metrics'], indent=2)}"
+            )
 
         if incident.get("logs"):
             parts.append(f"## Representative Logs\n```\n{incident['logs'][:600]}\n```")
 
         if investigation_steps:
-            parts.append("## Investigation Steps Taken\n" + "\n".join(f"{i+1}. {s}" for i, s in enumerate(investigation_steps)))
+            parts.append(
+                "## Investigation Steps Taken\n"
+                + "\n".join(f"{i + 1}. {s}" for i, s in enumerate(investigation_steps))
+            )
 
         if incident.get("timeline"):
-            parts.append("## Incident Timeline\n" + "\n".join(f"- {t}" for t in incident["timeline"][:10]))
+            parts.append(
+                "## Incident Timeline\n"
+                + "\n".join(f"- {t}" for t in incident["timeline"][:10])
+            )
 
         parts.append(
             "\nGenerate a complete structured postmortem in JSON format. "
@@ -204,7 +216,9 @@ class PostmortemAgent:
         # Fallback: build from incident context
         return self._build_fallback(incident, root_cause, text)
 
-    def _build_from_json(self, data: dict, incident: dict, root_cause: str) -> Postmortem:
+    def _build_from_json(
+        self, data: dict, incident: dict, root_cause: str
+    ) -> Postmortem:
         """Build Postmortem from parsed JSON response."""
         five_why_data = data.get("five_why", {})
         five_why = FiveWhyAnalysis(
@@ -233,7 +247,9 @@ class PostmortemAgent:
             start_time=data.get("start_time", ""),
             end_time=data.get("end_time", ""),
             duration_minutes=_parse_int_field(data.get("duration_minutes", 0)),
-            affected_services=data.get("affected_services", incident.get("context", {}).get("stack", [])),
+            affected_services=data.get(
+                "affected_services", incident.get("context", {}).get("stack", [])
+            ),
             user_impact=data.get("user_impact", ""),
             executive_summary=data.get("executive_summary", data.get("summary", "")),
             timeline=data.get("timeline", []),
@@ -246,7 +262,9 @@ class PostmortemAgent:
             mttr_baseline_min=30,
         )
 
-    def _build_fallback(self, incident: dict, root_cause: str, llm_text: str) -> Postmortem:
+    def _build_fallback(
+        self, incident: dict, root_cause: str, llm_text: str
+    ) -> Postmortem:
         """Build a minimal postmortem when JSON parsing fails."""
         ctx = incident.get("context", {})
         stack = ctx.get("stack", [])
@@ -255,23 +273,30 @@ class PostmortemAgent:
         action_items = []
         for m in re.finditer(r"[-•]\s+(.{20,200})", llm_text):
             item_text = m.group(1).strip()
-            if any(kw in item_text.lower() for kw in ["add", "implement", "create", "fix", "update", "monitor"]):
-                action_items.append(ActionItem(
-                    item=item_text[:150],
-                    owner="Engineering",
-                    prevents="Recurrence of this incident type",
-                    priority="short_term",
-                    deadline="within 2 weeks",
-                ))
+            if any(
+                kw in item_text.lower()
+                for kw in ["add", "implement", "create", "fix", "update", "monitor"]
+            ):
+                action_items.append(
+                    ActionItem(
+                        item=item_text[:150],
+                        owner="Engineering",
+                        prevents="Recurrence of this incident type",
+                        priority="short_term",
+                        deadline="within 2 weeks",
+                    )
+                )
 
         if not action_items:
-            action_items = [ActionItem(
-                item=f"Investigate and fix: {root_cause}",
-                owner="Engineering",
-                prevents="Recurrence",
-                priority="immediate",
-                deadline="within 1 week",
-            )]
+            action_items = [
+                ActionItem(
+                    item=f"Investigate and fix: {root_cause}",
+                    owner="Engineering",
+                    prevents="Recurrence",
+                    priority="immediate",
+                    deadline="within 1 week",
+                )
+            ]
 
         return Postmortem(
             title=f"Incident: {root_cause[:60]}",

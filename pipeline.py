@@ -20,11 +20,9 @@ import sys
 import time
 from pathlib import Path
 
-import yaml
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.panel import Panel
-from rich.progress import track
 
 load_dotenv()
 console = Console()
@@ -46,7 +44,9 @@ def run_stage(name: str, cmd: list[str], cwd: Path | None = None) -> int:
         return 1
     elapsed = time.time() - start
     if result.returncode != 0:
-        console.print(f"[red]Stage {name} failed (exit {result.returncode}) after {elapsed:.1f}s[/red]")
+        console.print(
+            f"[red]Stage {name} failed (exit {result.returncode}) after {elapsed:.1f}s[/red]"
+        )
     else:
         console.print(f"[green]Stage {name} completed in {elapsed:.1f}s[/green]")
     return result.returncode
@@ -54,18 +54,30 @@ def run_stage(name: str, cmd: list[str], cwd: Path | None = None) -> int:
 
 def stage_sft(args: argparse.Namespace) -> int:
     cmd = [
-        sys.executable, "training/train.py",
-        "--model_name", args.base_model,
-        "--data_path", args.sft_data,
-        "--output_dir", args.sft_checkpoint,
-        "--num_train_epochs", str(args.sft_epochs),
-        "--per_device_train_batch_size", "2",
-        "--gradient_accumulation_steps", "16",
-        "--learning_rate", "2e-5",
-        "--warmup_ratio", "0.05",
-        "--save_strategy", "epoch",
-        "--logging_steps", "10",
-        "--deepspeed", args.ds_config,
+        sys.executable,
+        "training/train.py",
+        "--model_name",
+        args.base_model,
+        "--data_path",
+        args.sft_data,
+        "--output_dir",
+        args.sft_checkpoint,
+        "--num_train_epochs",
+        str(args.sft_epochs),
+        "--per_device_train_batch_size",
+        "2",
+        "--gradient_accumulation_steps",
+        "16",
+        "--learning_rate",
+        "2e-5",
+        "--warmup_ratio",
+        "0.05",
+        "--save_strategy",
+        "epoch",
+        "--logging_steps",
+        "10",
+        "--deepspeed",
+        args.ds_config,
     ]
     return run_stage("SFT", cmd)
 
@@ -74,40 +86,62 @@ def stage_rl(args: argparse.Namespace) -> int:
     # Note: --ppo_epochs was removed when the RL trainer migrated from PPO to GRPO.
     # Use --num_generations to control the GRPO group size instead.
     cmd = [
-        sys.executable, "training/train_rl.py",
-        "--model_path", args.sft_checkpoint,
-        "--output_dir", args.rl_checkpoint,
-        "--drill_set", args.drill_set,
-        "--num_train_epochs", str(args.rl_epochs),
-        "--num_generations", "8",
-        "--learning_rate", "1e-5",
-        "--logging_steps", "10",
+        sys.executable,
+        "training/train_rl.py",
+        "--model_path",
+        args.sft_checkpoint,
+        "--output_dir",
+        args.rl_checkpoint,
+        "--drill_set",
+        args.drill_set,
+        "--num_train_epochs",
+        str(args.rl_epochs),
+        "--num_generations",
+        "8",
+        "--learning_rate",
+        "1e-5",
+        "--logging_steps",
+        "10",
     ]
     return run_stage("RL (MTTR reward)", cmd)
 
 
 def stage_dpo(args: argparse.Namespace) -> int:
     cmd = [
-        sys.executable, "training/train_dpo.py",
-        "--model_path", args.rl_checkpoint,
-        "--data_path", args.dpo_data,
-        "--output_dir", args.final_checkpoint,
-        "--num_train_epochs", "1",
-        "--per_device_train_batch_size", "2",
-        "--gradient_accumulation_steps", "8",
-        "--learning_rate", "5e-6",
-        "--beta", "0.1",
-        "--logging_steps", "10",
+        sys.executable,
+        "training/train_dpo.py",
+        "--model_path",
+        args.rl_checkpoint,
+        "--data_path",
+        args.dpo_data,
+        "--output_dir",
+        args.final_checkpoint,
+        "--num_train_epochs",
+        "1",
+        "--per_device_train_batch_size",
+        "2",
+        "--gradient_accumulation_steps",
+        "8",
+        "--learning_rate",
+        "5e-6",
+        "--beta",
+        "0.1",
+        "--logging_steps",
+        "10",
     ]
     return run_stage("DPO alignment", cmd)
 
 
 def stage_eval(args: argparse.Namespace) -> int:
     cmd = [
-        sys.executable, "evaluation/compassbench.py",
-        "--model_path", args.final_checkpoint,
-        "--drill_set", args.drill_set,
-        "--output_path", "results/compassbench_results.json",
+        sys.executable,
+        "evaluation/compassbench.py",
+        "--model_path",
+        args.final_checkpoint,
+        "--drill_set",
+        args.drill_set,
+        "--output_path",
+        "results/compassbench_results.json",
     ]
     return run_stage("CompassBench evaluation", cmd)
 
@@ -128,17 +162,24 @@ def main() -> None:
     args = parser.parse_args()
 
     # Create output directories
-    for d in [args.sft_checkpoint, args.rl_checkpoint, args.final_checkpoint, "results"]:
+    for d in [
+        args.sft_checkpoint,
+        args.rl_checkpoint,
+        args.final_checkpoint,
+        "results",
+    ]:
         Path(d).mkdir(parents=True, exist_ok=True)
 
     stages_to_run = STAGES if args.stage == "all" else [args.stage]
     dispatch = {"sft": stage_sft, "rl": stage_rl, "dpo": stage_dpo, "eval": stage_eval}
 
-    console.print(Panel(
-        "[bold cyan]OncallCompass Training Pipeline[/bold cyan]\n"
-        f"Stages: {', '.join(stages_to_run)}",
-        title="oncallcompass",
-    ))
+    console.print(
+        Panel(
+            "[bold cyan]OncallCompass Training Pipeline[/bold cyan]\n"
+            f"Stages: {', '.join(stages_to_run)}",
+            title="oncallcompass",
+        )
+    )
 
     for stage_name in stages_to_run:
         rc = dispatch[stage_name](args)

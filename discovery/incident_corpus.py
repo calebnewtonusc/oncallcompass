@@ -21,7 +21,6 @@ import argparse
 import hashlib
 import json
 import os
-import re
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -63,6 +62,7 @@ RUNBOOK_REPOS = [
 @dataclass
 class IncidentDocument:
     """A normalized incident document from any source."""
+
     source: str
     source_url: str
     title: str
@@ -70,9 +70,13 @@ class IncidentDocument:
     content: str
     doc_type: str  # "postmortem" | "runbook" | "incident_ticket"
     metadata: dict[str, Any]
+    # doc_id is a proper dataclass field (not a method) so that dataclasses.asdict()
+    # includes it in saved JSON files and loading code can find it without KeyError.
+    doc_id: str = ""
 
-    def doc_id(self) -> str:
-        return hashlib.sha256(self.source_url.encode()).hexdigest()[:16]
+    def __post_init__(self) -> None:
+        if not self.doc_id:
+            self.doc_id = hashlib.sha256(self.source_url.encode()).hexdigest()[:16]
 
 
 class GitHubPostmortemCrawler:
@@ -80,10 +84,12 @@ class GitHubPostmortemCrawler:
 
     def __init__(self, token: str | None = None) -> None:
         self.session = requests.Session()
-        self.session.headers.update({
-            "Accept": "application/vnd.github.v3+json",
-            "User-Agent": "OncallCompass-Corpus-Crawler/1.0",
-        })
+        self.session.headers.update(
+            {
+                "Accept": "application/vnd.github.v3+json",
+                "User-Agent": "OncallCompass-Corpus-Crawler/1.0",
+            }
+        )
         if token:
             self.session.headers["Authorization"] = f"Bearer {token}"
 
@@ -100,7 +106,8 @@ class GitHubPostmortemCrawler:
             return docs
 
         md_files = [
-            item for item in tree
+            item
+            for item in tree
             if item.get("type") == "blob" and item.get("path", "").endswith(".md")
         ]
         console.print(f"  Found {len(md_files)} markdown files in {repo}")
@@ -117,15 +124,17 @@ class GitHubPostmortemCrawler:
                     continue
 
                 doc_type = self._classify_doc(item["path"], content)
-                docs.append(IncidentDocument(
-                    source=f"github:{repo}",
-                    source_url=raw_url,
-                    title=item["path"],
-                    date=None,
-                    content=content,
-                    doc_type=doc_type,
-                    metadata={"repo": repo, "path": item["path"]},
-                ))
+                docs.append(
+                    IncidentDocument(
+                        source=f"github:{repo}",
+                        source_url=raw_url,
+                        title=item["path"],
+                        date=None,
+                        content=content,
+                        doc_type=doc_type,
+                        metadata={"repo": repo, "path": item["path"]},
+                    )
+                )
                 time.sleep(0.1)  # Be polite
             except requests.RequestException:
                 continue
@@ -137,11 +146,19 @@ class GitHubPostmortemCrawler:
         path_lower = path.lower()
         content_lower = content.lower()
 
-        if any(kw in path_lower for kw in ["postmortem", "post-mortem", "incident", "outage", "rca"]):
+        if any(
+            kw in path_lower
+            for kw in ["postmortem", "post-mortem", "incident", "outage", "rca"]
+        ):
             return "postmortem"
-        if any(kw in path_lower for kw in ["runbook", "run-book", "playbook", "procedure"]):
+        if any(
+            kw in path_lower for kw in ["runbook", "run-book", "playbook", "procedure"]
+        ):
             return "runbook"
-        if any(kw in content_lower[:500] for kw in ["root cause", "timeline", "impact", "resolution"]):
+        if any(
+            kw in content_lower[:500]
+            for kw in ["root cause", "timeline", "impact", "resolution"]
+        ):
             return "postmortem"
         return "runbook"
 
@@ -171,7 +188,10 @@ class BlogPostmortemCrawler:
             href = link["href"]
             full_url = urljoin(url, href)
             text = link.get_text(strip=True).lower()
-            if any(kw in text for kw in ["incident", "outage", "postmortem", "rca", "failure", "down"]):
+            if any(
+                kw in text
+                for kw in ["incident", "outage", "postmortem", "rca", "failure", "down"]
+            ):
                 if urlparse(full_url).netloc == urlparse(url).netloc:
                     article_urls.append(full_url)
 
@@ -244,7 +264,7 @@ def save_corpus(docs: list[IncidentDocument], output_dir: Path) -> None:
     saved = 0
     new_entries: list[str] = []
     for doc in docs:
-        doc_id = doc.doc_id()
+        doc_id = doc.doc_id
         doc_path = output_dir / f"{doc.doc_type}_{doc_id}.json"
 
         if doc_path.exists() or doc_id in existing_ids:
@@ -253,14 +273,16 @@ def save_corpus(docs: list[IncidentDocument], output_dir: Path) -> None:
         with open(doc_path, "w") as f:
             json.dump(asdict(doc), f, indent=2)
 
-        entry = json.dumps({
-            "id": doc_id,
-            "source": doc.source,
-            "url": doc.source_url,
-            "title": doc.title,
-            "type": doc.doc_type,
-            "path": str(doc_path),
-        })
+        entry = json.dumps(
+            {
+                "id": doc_id,
+                "source": doc.source,
+                "url": doc.source_url,
+                "title": doc.title,
+                "type": doc.doc_type,
+                "path": str(doc_path),
+            }
+        )
         new_entries.append(entry)
         existing_ids.add(doc_id)
         saved += 1
@@ -286,7 +308,9 @@ def main() -> None:
     all_docs: list[IncidentDocument] = []
 
     if args.sources in ("all", "github"):
-        console.print("[bold cyan]Crawling GitHub postmortem repositories...[/bold cyan]")
+        console.print(
+            "[bold cyan]Crawling GitHub postmortem repositories...[/bold cyan]"
+        )
         github_crawler = GitHubPostmortemCrawler(token=args.github_token)
 
         for repo in GITHUB_POSTMORTEM_REPOS:

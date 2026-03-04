@@ -39,10 +39,10 @@ from trl import GRPOConfig, GRPOTrainer
 load_dotenv()
 
 # Reward weights
-W_RANK_FIRST = 2.0      # reward for correct root cause in position 1
-W_RANK_PARTIAL = 0.5    # partial credit weight (1/rank)
+W_RANK_FIRST = 2.0  # reward for correct root cause in position 1
+W_RANK_PARTIAL = 0.5  # partial credit weight (1/rank)
 W_MTTR_REDUCTION = 1.5  # reward for MTTR reduction vs. baseline
-W_WASTED_STEPS = 0.3    # penalty per wasted investigation step
+W_WASTED_STEPS = 0.3  # penalty per wasted investigation step
 
 
 def compute_mttr_reward(
@@ -87,25 +87,29 @@ def compute_mttr_reward(
     # otherwise a short but incorrect response could earn a positive MTTR reward.
     model_steps = len(response.get("investigation_steps", []))
     expert_steps = len(ground_truth.get("expert_steps", []))
-    wasted = max(0, model_steps - expert_steps)
 
     if baseline_steps > 0 and correct_rank == 1:
         mttr_ratio = (baseline_steps - model_steps) / baseline_steps
         reward += W_MTTR_REDUCTION * min(max(mttr_ratio, -1.0), 1.0)
 
-    reward -= W_WASTED_STEPS * wasted
+    if expert_steps > 0:
+        wasted = max(0, model_steps - expert_steps)
+        reward -= W_WASTED_STEPS * wasted
 
     return float(reward)
 
 
 def build_drill_prompt(drill: dict[str, Any]) -> str:
     """Format a drill scenario into a model prompt."""
-    context = json.dumps({
-        "alerts": drill.get("alerts", []),
-        "logs": drill.get("logs", ""),
-        "metrics": drill.get("metrics", {}),
-        "context": drill.get("context", {}),
-    }, indent=2)
+    context = json.dumps(
+        {
+            "alerts": drill.get("alerts", []),
+            "logs": drill.get("logs", ""),
+            "metrics": drill.get("metrics", {}),
+            "context": drill.get("context", {}),
+        },
+        indent=2,
+    )
     return (
         "<|im_start|>system\n"
         "You are OncallCompass. Respond with ranked hypotheses and investigation steps in JSON.\n"
@@ -140,32 +144,52 @@ def build_rl_dataset(drills: list[dict[str, Any]]) -> Dataset:
     random.shuffle(drills)
     records = []
     for drill in drills:
-        records.append({
-            "prompt": build_drill_prompt(drill),
-            "ground_truth": drill.get("ground_truth", {}),
-            "baseline_steps": drill.get("ground_truth", {}).get("baseline_steps", 8),
-        })
+        records.append(
+            {
+                "prompt": build_drill_prompt(drill),
+                "ground_truth": drill.get("ground_truth", {}),
+                "baseline_steps": drill.get("ground_truth", {}).get(
+                    "baseline_steps", 8
+                ),
+            }
+        )
     return Dataset.from_list(records)
 
 
-def reward_fn(prompts: list[str], completions: list[str], **kwargs) -> list[float]:
+def reward_fn(
+    prompts: list[str], completions: list[list[str]], **kwargs
+) -> list[float]:
     """
     GRPO-compatible reward function.
 
     Args:
         prompts: List of input prompts (passed by GRPOTrainer).
-        completions: List of model completions.
+        completions: List of completion groups — each element is a list of
+                     num_generations strings for one prompt.
         **kwargs: Extra dataset columns passed through by GRPOTrainer,
                   including 'ground_truth' and 'baseline_steps'.
 
     Returns:
-        List of scalar rewards, one per completion.
+        List of scalar rewards, one per completion (length =
+        len(prompts) * num_generations).
     """
-    ground_truths = kwargs.get("ground_truth", [])
-    baseline_steps_list = kwargs.get("baseline_steps", [])
+    # GRPOTrainer passes completions as list[list[str]] — one inner list per
+    # prompt, with num_generations completions each.  Flatten to a 1-D list
+    # and expand the per-prompt metadata to match.
+    flat_completions: list[str] = [c for group in completions for c in group]
+    num_generations = len(completions[0]) if completions else 1
+
+    ground_truths_raw = kwargs.get("ground_truth", [])
+    baseline_steps_raw = kwargs.get("baseline_steps", [])
+
+    # Expand per-prompt metadata to align with flattened completions.
+    ground_truths = [gt for gt in ground_truths_raw for _ in range(num_generations)]
+    baseline_steps_list = [
+        bs for bs in baseline_steps_raw for _ in range(num_generations)
+    ]
 
     rewards = []
-    for i, completion in enumerate(completions):
+    for i, completion in enumerate(flat_completions):
         gt = ground_truths[i] if i < len(ground_truths) else {}
         baseline = baseline_steps_list[i] if i < len(baseline_steps_list) else 8
 
@@ -176,6 +200,7 @@ def reward_fn(prompts: list[str], completions: list[str], **kwargs) -> list[floa
         except json.JSONDecodeError:
             # Try extracting JSON block
             import re
+
             m = re.search(r"\{.*\}", completion, re.DOTALL)
             if m:
                 try:
@@ -200,20 +225,27 @@ def main() -> None:
     parser.add_argument("--learning_rate", type=float, default=1e-5)
     parser.add_argument("--batch_size", type=int, default=4)
     parser.add_argument("--gradient_accumulation_steps", type=int, default=4)
-    parser.add_argument("--num_generations", type=int, default=8,
-                        help="Number of completions per prompt (GRPO group size)")
+    parser.add_argument(
+        "--num_generations",
+        type=int,
+        default=8,
+        help="Number of completions per prompt (GRPO group size)",
+    )
     parser.add_argument("--max_completion_length", type=int, default=512)
-    parser.add_argument("--beta", type=float, default=0.01,
-                        help="KL penalty coefficient")
+    parser.add_argument(
+        "--beta", type=float, default=0.01, help="KL penalty coefficient"
+    )
     parser.add_argument("--logging_steps", type=int, default=10)
     args = parser.parse_args()
 
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
 
     if not Path(args.drill_set).exists():
-        print(f"Drill set not found at {args.drill_set}. Generating synthetic drills...")
+        print(
+            f"Drill set not found at {args.drill_set}. Generating synthetic drills..."
+        )
         Path(args.drill_set).parent.mkdir(parents=True, exist_ok=True)
-        with open(args.drill_set, "w") as f:
+        with open(args.drill_set, "w"):
             pass
         print("Warning: empty drill set. Run synthesis/incident_synthesizer.py first.")
         return
@@ -237,7 +269,9 @@ def main() -> None:
         trust_remote_code=True,
     )
     sft_checkpoint_path = args.model_path
-    model = PeftModel.from_pretrained(base_model, sft_checkpoint_path, is_trainable=True)
+    model = PeftModel.from_pretrained(
+        base_model, sft_checkpoint_path, is_trainable=True
+    )
 
     config = GRPOConfig(
         output_dir=args.output_dir,
@@ -252,7 +286,7 @@ def main() -> None:
         logging_steps=args.logging_steps,
         save_steps=100,
         save_total_limit=2,
-        report_to="wandb" if os.environ.get("WANDB_API_KEY") else "none",
+        report_to=["wandb"] if os.environ.get("WANDB_API_KEY") else [],
     )
 
     trainer = GRPOTrainer(

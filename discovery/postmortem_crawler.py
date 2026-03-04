@@ -30,6 +30,7 @@ from loguru import logger
 
 try:
     from github import Github
+
     HAS_GITHUB = True
 except ImportError:
     HAS_GITHUB = False
@@ -38,6 +39,7 @@ except ImportError:
 @dataclass
 class PostmortemDoc:
     """A single raw postmortem document."""
+
     source_url: str
     title: str
     raw_text: str
@@ -150,7 +152,9 @@ class PostmortemCrawler:
                 unique.append(doc)
 
         quality = [d for d in unique if d.is_quality]
-        logger.info(f"Crawled {len(unique)} docs, {len(quality)} meet quality threshold")
+        logger.info(
+            f"Crawled {len(unique)} docs, {len(quality)} meet quality threshold"
+        )
 
         self._save(quality)
         return quality
@@ -181,6 +185,7 @@ class PostmortemCrawler:
 
         try:
             import feedparser
+
             feed = feedparser.parse(text)
         except ImportError:
             soup = BeautifulSoup(text, "xml")
@@ -209,7 +214,11 @@ class PostmortemCrawler:
             if not any(kw in title for kw in keywords):
                 continue
 
-            content = getattr(entry, "content", [{}])[0].get("value", "") if hasattr(entry, "content") else ""
+            content = (
+                getattr(entry, "content", [{}])[0].get("value", "")
+                if hasattr(entry, "content")
+                else ""
+            )
             if not content:
                 content = getattr(entry, "summary", "")
 
@@ -243,7 +252,8 @@ class PostmortemCrawler:
                     if item.type == "dir":
                         contents.extend(repo.get_contents(item.path))
                     elif item.name.endswith(".md") and any(
-                        kw in item.name.lower() for kw in ["postmortem", "incident", "outage", "failure"]
+                        kw in item.name.lower()
+                        for kw in ["postmortem", "incident", "outage", "failure"]
                     ):
                         text = item.decoded_content.decode("utf-8", errors="ignore")
                         doc = self._build_doc(
@@ -259,7 +269,9 @@ class PostmortemCrawler:
 
         return docs
 
-    def _build_doc(self, source_url: str, title: str, text: str, company: str) -> PostmortemDoc:
+    def _build_doc(
+        self, source_url: str, title: str, text: str, company: str
+    ) -> PostmortemDoc:
         """Build a PostmortemDoc from raw text."""
         has_root_cause = any(
             re.search(pattern, text, re.IGNORECASE)

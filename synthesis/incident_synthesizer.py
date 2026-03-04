@@ -122,15 +122,12 @@ class IncidentSynthesizer:
             message = self.client.messages.create(
                 model=self.model,
                 max_tokens=2048,
-                messages=[{
-                    "role": "user",
-                    "content": SFT_EXTRACTION_PROMPT + content
-                }]
+                messages=[{"role": "user", "content": SFT_EXTRACTION_PROMPT + content}],
             )
             response_text = message.content[0].text.strip()
 
             # Extract JSON from response
-            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+            json_match = re.search(r"\{.*\}", response_text, re.DOTALL)
             if not json_match:
                 return None
 
@@ -154,14 +151,11 @@ class IncidentSynthesizer:
             message = self.client.messages.create(
                 model=self.model,
                 max_tokens=2048,
-                messages=[{
-                    "role": "user",
-                    "content": DPO_PAIR_PROMPT + content
-                }]
+                messages=[{"role": "user", "content": DPO_PAIR_PROMPT + content}],
             )
             response_text = message.content[0].text.strip()
 
-            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+            json_match = re.search(r"\{.*\}", response_text, re.DOTALL)
             if not json_match:
                 return None
 
@@ -188,13 +182,27 @@ def load_raw_documents(raw_dir: Path) -> list[dict[str, Any]]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="OncallCompass training pair synthesizer")
+    parser = argparse.ArgumentParser(
+        description="OncallCompass training pair synthesizer"
+    )
     parser.add_argument("--raw_dir", default="data/raw")
     parser.add_argument("--output_dir", default="data")
     parser.add_argument("--anthropic_key", default=os.environ.get("ANTHROPIC_API_KEY"))
-    parser.add_argument("--max_docs", type=int, default=None, help="Cap number of docs (for testing)")
-    parser.add_argument("--dpo_fraction", type=float, default=0.3, help="Fraction of docs to use for DPO pairs")
-    parser.add_argument("--drill_fraction", type=float, default=0.1, help="Fraction of docs to hold out as drills")
+    parser.add_argument(
+        "--max_docs", type=int, default=None, help="Cap number of docs (for testing)"
+    )
+    parser.add_argument(
+        "--dpo_fraction",
+        type=float,
+        default=0.3,
+        help="Fraction of docs to use for DPO pairs",
+    )
+    parser.add_argument(
+        "--drill_fraction",
+        type=float,
+        default=0.1,
+        help="Fraction of docs to hold out as drills",
+    )
     args = parser.parse_args()
 
     raw_dir = Path(args.raw_dir)
@@ -209,13 +217,15 @@ def main() -> None:
 
     docs = load_raw_documents(raw_dir)
     if not docs:
-        console.print(f"[red]No documents found in {raw_dir}. Run discovery/incident_corpus.py first.[/red]")
+        console.print(
+            f"[red]No documents found in {raw_dir}. Run discovery/incident_corpus.py first.[/red]"
+        )
         return
 
     console.print(f"Loaded {len(docs)} raw documents")
 
     if args.max_docs:
-        docs = docs[:args.max_docs]
+        docs = docs[: args.max_docs]
 
     # Shuffle and split
     random.shuffle(docs)
