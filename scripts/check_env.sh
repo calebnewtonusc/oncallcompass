@@ -20,14 +20,46 @@ echo ""
 
 # ── Python packages ──────────────────────────────────────────
 echo "Checking Python packages..."
-python -c "import torch; assert torch.cuda.is_available()" 2>/dev/null && pass "PyTorch + CUDA" || fail "PyTorch CUDA not available"
-python -c "import transformers" 2>/dev/null && pass "transformers" || fail "transformers not installed"
-python -c "import trl" 2>/dev/null && pass "trl" || fail "trl not installed"
-python -c "import peft" 2>/dev/null && pass "peft" || fail "peft not installed"
-python -c "import deepspeed" 2>/dev/null && pass "deepspeed" || fail "deepspeed not installed"
-python -c "import anthropic" 2>/dev/null && pass "anthropic SDK" || warn "anthropic not installed (synthesis fallback disabled)"
-python -c "import rich" 2>/dev/null && pass "rich" || fail "rich not installed"
-python -c "import fastapi" 2>/dev/null && pass "fastapi" || warn "fastapi not installed (HTTP server disabled)"
+if python -c "import torch; assert torch.cuda.is_available()" 2>/dev/null; then
+    pass "PyTorch + CUDA"
+else
+    fail "PyTorch CUDA not available"
+fi
+if python -c "import transformers" 2>/dev/null; then
+    pass "transformers"
+else
+    fail "transformers not installed"
+fi
+if python -c "import trl" 2>/dev/null; then
+    pass "trl"
+else
+    fail "trl not installed"
+fi
+if python -c "import peft" 2>/dev/null; then
+    pass "peft"
+else
+    fail "peft not installed"
+fi
+if python -c "import deepspeed" 2>/dev/null; then
+    pass "deepspeed"
+else
+    fail "deepspeed not installed"
+fi
+if python -c "import anthropic" 2>/dev/null; then
+    pass "anthropic SDK"
+else
+    warn "anthropic not installed (synthesis fallback disabled)"
+fi
+if python -c "import rich" 2>/dev/null; then
+    pass "rich"
+else
+    fail "rich not installed"
+fi
+if python -c "import fastapi" 2>/dev/null; then
+    pass "fastapi"
+else
+    warn "fastapi not installed (HTTP server disabled)"
+fi
 echo ""
 
 # ── GPU availability ─────────────────────────────────────────

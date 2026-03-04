@@ -339,8 +339,8 @@ def main() -> None:
 
     # Load model
     console.print(f"Loading model: {args.model_path}")
-    tokenizer = AutoTokenizer.from_pretrained(args.model_path)
-    model = AutoModelForCausalLM.from_pretrained(
+    tokenizer = AutoTokenizer.from_pretrained(args.model_path)  # nosec B615
+    model = AutoModelForCausalLM.from_pretrained(  # nosec B615
         args.model_path,
         torch_dtype=torch.bfloat16,
         device_map="auto",

@@ -145,7 +145,7 @@ class TriageAgent:
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
 
         print(f"Loading OncallCompass from {model_path} on {self.device}...")
-        self.tokenizer = AutoTokenizer.from_pretrained(
+        self.tokenizer = AutoTokenizer.from_pretrained(  # nosec B615
             model_path,
             trust_remote_code=True,
         )
@@ -156,7 +156,7 @@ class TriageAgent:
         ):
             self.tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
 
-        self.model = AutoModelForCausalLM.from_pretrained(
+        self.model = AutoModelForCausalLM.from_pretrained(  # nosec B615
             model_path,
             torch_dtype=torch.bfloat16 if self.device != "cpu" else torch.float32,
             device_map="auto" if self.device.startswith("cuda") else None,

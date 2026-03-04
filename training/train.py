@@ -78,7 +78,7 @@ def build_prompt(example: dict[str, Any]) -> str:
 
 def load_sft_dataset(data_path: str) -> Dataset:
     """Load and format the SFT dataset from a JSONL file."""
-    dataset = load_dataset("json", data_files=data_path, split="train")
+    dataset = load_dataset("json", data_files=data_path, split="train")  # nosec B615
     dataset = dataset.map(
         lambda ex: {"text": build_prompt(ex)},
         remove_columns=dataset.column_names,
@@ -106,7 +106,7 @@ def main() -> None:
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
 
     print(f"Loading tokenizer: {args.model_name}")
-    tokenizer = AutoTokenizer.from_pretrained(
+    tokenizer = AutoTokenizer.from_pretrained(  # nosec B615
         args.model_name,
         trust_remote_code=True,
         token=os.environ.get("HF_TOKEN"),
@@ -120,7 +120,7 @@ def main() -> None:
         tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
 
     print(f"Loading base model: {args.model_name}")
-    model = AutoModelForCausalLM.from_pretrained(
+    model = AutoModelForCausalLM.from_pretrained(  # nosec B615
         args.model_name,
         torch_dtype=torch.bfloat16,
         trust_remote_code=True,

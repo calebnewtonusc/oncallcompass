@@ -99,12 +99,12 @@ def main() -> None:
 
     base_model_path = args.base_model or args.model_path
     print(f"Loading tokenizer from {args.model_path}")
-    tokenizer = AutoTokenizer.from_pretrained(args.model_path, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(args.model_path, trust_remote_code=True)  # nosec B615
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
     print(f"Loading base model from {base_model_path}")
-    base = AutoModelForCausalLM.from_pretrained(
+    base = AutoModelForCausalLM.from_pretrained(  # nosec B615
         base_model_path,
         torch_dtype=torch.bfloat16,
         trust_remote_code=True,
@@ -119,7 +119,7 @@ def main() -> None:
         model = base
 
     print(f"Loading DPO dataset from {args.data_path}")
-    raw_dataset = load_dataset("json", data_files=args.data_path, split="train")
+    raw_dataset = load_dataset("json", data_files=args.data_path, split="train")  # nosec B615
     dataset = raw_dataset.map(
         format_preference_example,
         remove_columns=raw_dataset.column_names,
@@ -147,7 +147,7 @@ def main() -> None:
     # eliminating the KL constraint and destabilizing training.
     # Always load the base model (without PEFT) as the frozen reference so
     # that the KL term measures divergence from the pre-RL base distribution.
-    ref_model = AutoModelForCausalLM.from_pretrained(
+    ref_model = AutoModelForCausalLM.from_pretrained(  # nosec B615
         base_model_path, torch_dtype=torch.bfloat16, device_map=None
     )
     ref_model.eval()

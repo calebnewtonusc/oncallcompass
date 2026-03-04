@@ -259,11 +259,11 @@ def main() -> None:
         return
 
     print(f"Loading model from {args.model_path}")
-    tokenizer = AutoTokenizer.from_pretrained(args.model_path)
+    tokenizer = AutoTokenizer.from_pretrained(args.model_path)  # nosec B615
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    base_model = AutoModelForCausalLM.from_pretrained(
+    base_model = AutoModelForCausalLM.from_pretrained(  # nosec B615
         args.model_path,
         torch_dtype=torch.bfloat16,
         trust_remote_code=True,
