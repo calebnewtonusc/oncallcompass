@@ -1,0 +1,30 @@
+# OncallCompass RL (PPO/GRPO) Training Configuration
+# Used by training/train_rl.py
+
+model:
+  base: checkpoints/sft
+  torch_dtype: bfloat16
+
+reward:
+  weight_rank_first: 2.0       # reward when correct root cause is rank 1
+  weight_rank_partial: 0.5     # partial credit weight (1/rank)
+  weight_mttr_reduction: 1.5   # reward for reducing investigation steps vs baseline
+  weight_wasted_steps: 0.3     # penalty per wasted investigation step
+  baseline_steps: 8            # median steps for unguided investigation
+
+training:
+  output_dir: checkpoints/rl
+  num_train_epochs: 2
+  ppo_epochs: 4
+  batch_size: 8
+  mini_batch_size: 2
+  learning_rate: 1.0e-5
+  logging_steps: 10
+  bf16: true
+  report_to: wandb
+  run_name: oncallcompass-rl
+
+data:
+  drill_set: data/drills/compassbench_v1.jsonl
+
+deepspeed: training/configs/deepspeed_zero3.json

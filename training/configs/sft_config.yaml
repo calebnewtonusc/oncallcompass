@@ -1,0 +1,43 @@
+# OncallCompass SFT Training Configuration
+# Used by training/train.py
+
+model:
+  name: Qwen/Qwen2.5-7B-Coder-Instruct
+  torch_dtype: bfloat16
+
+lora:
+  r: 64
+  lora_alpha: 128
+  lora_dropout: 0.05
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+  bias: none
+
+training:
+  output_dir: checkpoints/sft
+  num_train_epochs: 3
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 16
+  learning_rate: 2.0e-5
+  warmup_ratio: 0.05
+  lr_scheduler_type: cosine
+  bf16: true
+  gradient_checkpointing: true
+  max_seq_length: 4096
+  dataset_text_field: text
+  save_strategy: epoch
+  logging_steps: 10
+  report_to: wandb
+  run_name: oncallcompass-sft
+
+data:
+  sft_path: data/sft_pairs.jsonl
+  val_split: 0.05
+
+deepspeed: training/configs/deepspeed_zero3.json

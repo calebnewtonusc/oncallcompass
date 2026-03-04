@@ -1,0 +1,119 @@
+version: "3.9"
+
+# OncallCompass production deployment
+# vLLM inference + API server + Redis
+
+services:
+
+  # ── vLLM inference (primary) ───────────────────────────────
+  oncallcompass-inference-1:
+    image: vllm/vllm-openai:latest
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=0,1,2,3
+      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN}
+    command: >
+      --model ${FINAL_CHECKPOINT:-checkpoints/final}
+      --served-model-name oncallcompass
+      --tensor-parallel-size 4
+      --gpu-memory-utilization 0.90
+      --max-model-len 8192
+      --max-num-seqs 32
+      --enable-prefix-caching
+      --trust-remote-code
+      --guided-decoding-backend xgrammar
+      --host 0.0.0.0
+      --port 8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ${CHECKPOINT_DIR:-./checkpoints}:/models:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["0", "1", "2", "3"]
+              capabilities: [gpu]
+
+  # ── vLLM inference (secondary) ────────────────────────────
+  oncallcompass-inference-2:
+    image: vllm/vllm-openai:latest
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=4,5,6,7
+      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN}
+    command: >
+      --model ${FINAL_CHECKPOINT:-checkpoints/final}
+      --served-model-name oncallcompass
+      --tensor-parallel-size 4
+      --gpu-memory-utilization 0.90
+      --max-model-len 8192
+      --max-num-seqs 32
+      --enable-prefix-caching
+      --trust-remote-code
+      --host 0.0.0.0
+      --port 8001
+    ports:
+      - "8001:8001"
+    volumes:
+      - ${CHECKPOINT_DIR:-./checkpoints}:/models:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["4", "5", "6", "7"]
+              capabilities: [gpu]
+
+  # ── FastAPI + load balancer ────────────────────────────────
+  oncallcompass-api:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.api
+    environment:
+      - VLLM_ENDPOINT_1=http://oncallcompass-inference-1:8000
+      - VLLM_ENDPOINT_2=http://oncallcompass-inference-2:8001
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - FINAL_CHECKPOINT=${FINAL_CHECKPOINT:-checkpoints/final}
+      - LOG_LEVEL=INFO
+    ports:
+      - "8080:8080"
+    depends_on:
+      oncallcompass-inference-1:
+        condition: service_healthy
+    command: >
+      uvicorn agents.triage_agent:app
+      --host 0.0.0.0
+      --port 8080
+      --workers 4
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ── Redis (incident context cache) ────────────────────────
+  redis:
+    image: redis:7-alpine
+    command: redis-server --maxmemory 1gb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # ── Prometheus metrics ────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+
+volumes:
+  redis_data:

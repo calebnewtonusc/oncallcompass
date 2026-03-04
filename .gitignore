@@ -1,0 +1,68 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+*.so
+*.dylib
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env
+
+# Environment variables
+.env.local
+.env.*.local
+
+# Checkpoints and model weights
+checkpoints/
+*.bin
+*.safetensors
+*.pt
+*.pth
+
+# Data (large files)
+data/raw/
+data/sft_pairs.jsonl
+data/dpo_pairs.jsonl
+data/drills/
+
+# Logs
+logs/
+*.log
+wandb/
+runs/
+
+# Results
+results/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node (web frontend)
+web/node_modules/
+web/.next/
+web/out/
+
+# Misc
+*.tmp
+*.bak
