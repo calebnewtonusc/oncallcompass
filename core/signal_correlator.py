@@ -286,7 +286,7 @@ class SignalCorrelator:
 
     def _get_earliest_time(self, alerts: list[dict]) -> str | None:
         """Get the earliest timestamp from a list of alerts."""
-        times = [a.get("time") for a in alerts if a.get("time")]
+        times: list[str] = [a["time"] for a in alerts if a.get("time")]
         return sorted(times)[0] if times else None
 
     def _get_earliest_metric_anomaly_time(self, alerts: list[dict]) -> str | None:
@@ -297,7 +297,9 @@ class SignalCorrelator:
         better estimate of when the underlying fault started than the alert
         fire time.
         """
-        times = [a.get("anomaly_start") for a in alerts if a.get("anomaly_start")]
+        times: list[str] = [
+            a["anomaly_start"] for a in alerts if a.get("anomaly_start")
+        ]
         return sorted(times)[0] if times else None
 
     def _compute_signal_strength(

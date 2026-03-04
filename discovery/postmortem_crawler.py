@@ -22,7 +22,7 @@ import os
 import re
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
-from typing import AsyncIterator
+from typing import Any, AsyncIterator
 
 import aiohttp
 from bs4 import BeautifulSoup
@@ -64,7 +64,7 @@ class PostmortemDoc:
         return len(self.raw_text) >= 500
 
 
-BLOG_SOURCES = [
+BLOG_SOURCES: list[dict[str, Any]] = [
     {
         "company": "netflix",
         "rss_url": "https://netflixtechblog.com/feed",
@@ -125,7 +125,7 @@ class PostmortemCrawler:
 
     async def crawl_all(self) -> list[PostmortemDoc]:
         """Crawl all sources concurrently."""
-        docs = []
+        docs: list[PostmortemDoc] = []
 
         async with aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=30),
@@ -138,9 +138,9 @@ class PostmortemCrawler:
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
         for result in results:
-            if isinstance(result, Exception):
+            if isinstance(result, BaseException):
                 logger.error(f"Crawl error: {result}")
-            else:
+            elif isinstance(result, list):
                 docs.extend(result)
 
         # Deduplicate
@@ -210,8 +210,8 @@ class PostmortemCrawler:
 
         keywords = source.get("keywords", [])
         for entry in feed.entries[:50]:
-            title = getattr(entry, "title", "").lower()
-            if not any(kw in title for kw in keywords):
+            entry_title: str = getattr(entry, "title", "").lower()
+            if not any(kw in entry_title for kw in keywords):
                 continue
 
             content = (

@@ -63,7 +63,7 @@ class CloudStatusCrawler:
 
     async def crawl_all(self) -> list[CloudIncident]:
         """Crawl all configured status page APIs."""
-        all_incidents = []
+        all_incidents: list[CloudIncident] = []
 
         async with aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=30),
@@ -76,9 +76,9 @@ class CloudStatusCrawler:
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
         for provider, result in zip(STATUS_APIS.keys(), results):
-            if isinstance(result, Exception):
+            if isinstance(result, BaseException):
                 logger.warning(f"Failed to crawl {provider}: {result}")
-            else:
+            elif isinstance(result, list):
                 all_incidents.extend(result)
                 logger.info(f"Crawled {len(result)} incidents from {provider}")
 

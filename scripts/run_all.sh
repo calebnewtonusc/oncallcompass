@@ -41,40 +41,40 @@ echo "  Collection complete"
 # ── Step 3: Synthesize training pairs ────────────────────────
 echo "[3/6] Synthesizing training pairs..."
 python synthesis/synthesize_bulk.py \
-    --raw_dir "${DATA_DIR}/raw" \
-    --output_dir "${DATA_DIR}" \
-    --n_per_template 3
+	--raw_dir "${DATA_DIR}/raw" \
+	--output_dir "${DATA_DIR}" \
+	--n_per_template 3
 
-echo "  SFT pairs: $(wc -l < "${DATA_DIR}/sft_pairs.jsonl")"
-echo "  DPO pairs: $(wc -l < "${DATA_DIR}/dpo_pairs.jsonl" 2>/dev/null || echo 0)"
+echo "  SFT pairs: $(wc -l <"${DATA_DIR}/sft_pairs.jsonl")"
+echo "  DPO pairs: $(wc -l <"${DATA_DIR}/dpo_pairs.jsonl" 2>/dev/null || echo 0)"
 
 # ── Step 4: Stage 1 — SFT ───────────────────────────────────
 echo "[4/6] Stage 1: SFT training..."
 deepspeed --num_gpus 8 training/train.py \
-    --model_name Qwen/Qwen2.5-7B-Coder-Instruct \
-    --data_path "${DATA_DIR}/sft_pairs.jsonl" \
-    --output_dir "${CHECKPOINT_DIR}/sft" \
-    --deepspeed training/configs/ds_config.json \
-    --num_train_epochs 3
+	--model_name Qwen/Qwen2.5-7B-Coder-Instruct \
+	--data_path "${DATA_DIR}/sft_pairs.jsonl" \
+	--output_dir "${CHECKPOINT_DIR}/sft" \
+	--deepspeed training/configs/ds_config.json \
+	--num_train_epochs 3
 
 echo "  SFT checkpoint: ${CHECKPOINT_DIR}/sft"
 
 # ── Step 5: Stage 2 — RL ────────────────────────────────────
 echo "[5/6] Stage 2: RL training..."
 deepspeed --num_gpus 8 training/train_rl.py \
-    --model_path "${CHECKPOINT_DIR}/sft" \
-    --output_dir "${CHECKPOINT_DIR}/rl" \
-    --drill_set "${DATA_DIR}/drills/compassbench_v1.jsonl" \
-    --num_train_epochs 2
+	--model_path "${CHECKPOINT_DIR}/sft" \
+	--output_dir "${CHECKPOINT_DIR}/rl" \
+	--drill_set "${DATA_DIR}/drills/compassbench_v1.jsonl" \
+	--num_train_epochs 2
 
 echo "  RL checkpoint: ${CHECKPOINT_DIR}/rl"
 
 # ── Step 6: CompassBench evaluation ──────────────────────────
 echo "[6/6] Running CompassBench evaluation..."
 ${EVAL_GPUS:+CUDA_VISIBLE_DEVICES=$EVAL_GPUS} python evaluation/compassbench.py \
-    --model_path "${CHECKPOINT_DIR}/rl" \
-    --drill_set "${DATA_DIR}/drills/compassbench_v1.jsonl" \
-    --output_path "results/${RUN_NAME}_compassbench.json"
+	--model_path "${CHECKPOINT_DIR}/rl" \
+	--drill_set "${DATA_DIR}/drills/compassbench_v1.jsonl" \
+	--output_path "results/${RUN_NAME}_compassbench.json"
 
 echo ""
 echo "OncallCompass pipeline complete."

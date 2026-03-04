@@ -289,9 +289,9 @@ async def crawl_all_statuspages(
 
     all_incidents: list[StatuspageIncident] = []
     for src, result in zip(STATUSPAGE_SOURCES, results):
-        if isinstance(result, Exception):
+        if isinstance(result, BaseException):
             logger.warning(f"Error crawling {src['provider']}: {result}")
-        else:
+        elif isinstance(result, list):
             all_incidents.extend(result)
 
     # Quality filter: must have root cause and duration

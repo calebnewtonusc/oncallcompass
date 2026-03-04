@@ -214,7 +214,8 @@ async def _get_issue_urls(
         # SRE Weekly uses standard WordPress-style archive page
         links_found = 0
         for a_tag in soup.find_all("a", href=re.compile(r"/sre-weekly-issue-\d+")):
-            href = urljoin(SRE_WEEKLY_BASE, a_tag["href"])
+            raw_href = a_tag["href"]
+            href = urljoin(SRE_WEEKLY_BASE, str(raw_href) if isinstance(raw_href, list) else raw_href)
             if href not in issue_urls:
                 issue_urls.append(href)
                 links_found += 1
@@ -223,7 +224,8 @@ async def _get_issue_urls(
         for heading in soup.find_all(["h2", "h3"]):
             a = heading.find("a")
             if a and a.get("href"):
-                href = urljoin(SRE_WEEKLY_BASE, a["href"])
+                raw_a_href = a["href"]
+                href = urljoin(SRE_WEEKLY_BASE, str(raw_a_href) if isinstance(raw_a_href, list) else raw_a_href)
                 if "sre-weekly" in href.lower() and href not in issue_urls:
                     issue_urls.append(href)
                     links_found += 1
@@ -258,7 +260,10 @@ async def _extract_links_from_issue(
 
     candidate_links = []
     for a_tag in content_div.find_all("a", href=True):
-        href = a_tag["href"]
+        raw_href = a_tag["href"]
+        href: str = (
+            " ".join(raw_href) if isinstance(raw_href, list) else str(raw_href)
+        )
         if not href.startswith("http"):
             continue
         if "sreweekly.com" in href:
